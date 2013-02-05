@@ -30,9 +30,9 @@
       (dolist (group groups)
         (insert "<tr><td class='docs'>")
         (insert (ecco--render-comments (car group)))
-        (insert "</td><td class=code><div class=highlight><pre>")
+        (insert "</td><td class=code>")
         (insert (ecco--render-code (cdr group)))
-        (insert "</pre></div></td></tr>"))
+        (insert "</td></tr>"))
       (insert "</tbody> 
     </table> 
 </div> 
@@ -42,6 +42,8 @@
       (pop-to-buffer (current-buffer)))))
 
 (defvar ecco-markdown-program "z:/holy/bin/common/markdown.pl")
+(defvar ecco-pygmentize-program "/usr/bin/pygmentize")
+(defvar ecco-use-pygments t)
 
 (defun ecco--gather-groups ()
   "Returns a list of conses of strings (COMMENT . CODE)"
@@ -77,19 +79,30 @@
                     code-snippets)))))
 
 (defun ecco--render-code (text)
-  "Return TEXT with span classes based on its fontification"
-  (let ((hfy-optimisations (list 'keep-overlays
-                                 'merge-adjacent-tags
-                                 'body-text-only)))
-    (htmlfontify-string text)))
+  "Return TEXT with span classes based on its fontification."
+  (if ecco-use-pygments
+      (ecco--pipe-text-through-program text (format "%s -g -f html"
+                                                    ecco-pygmentize-program))
+    (let ((hfy-optimisations (list 'keep-overlays
+                                   'merge-adjacent-tags
+                                   'body-text-only)))
+      (concat
+       "<div class=highlight><pre>"
+       (htmlfontify-string text)
+       "</pre></div>"))))
 
 (defun ecco--render-comments (text)
-  (let ((temp-buffer (generate-new-buffer " *ecco-markdown-temp*")))
+  "Return markdown output for TEXT."
+  (ecco--pipe-text-through-program text ecco-markdown-program))
+
+(defun ecco--pipe-text-through-program (text program)
+  (let ((temp-buffer (generate-new-buffer "*ecco-processing-temp*"))
+        (max-mini-window-height 0))
     (with-temp-buffer
       (insert text)
-      (shell-command-on-region (point-min) (point-max) ecco-markdown-program temp-buffer))
+      (shell-command-on-region (point-min) (point-max) program temp-buffer))
     (with-current-buffer temp-buffer
-      (buffer-substring-no-properties (point-min) (point-max))))) 
+      (buffer-substring-no-properties (point-min) (point-max)))))
 
 (defun ecco--gather-groups-debug ()
   (interactive)
