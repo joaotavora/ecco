@@ -1,50 +1,18 @@
+;; **ecco** is a port of docco
+;;
+;; blablabla
+;;
+;;
 (require 'newcomment)
 (require 'htmlfontify)
 
-(defun ecco ()
-  (interactive)
-  (let ((groups (ecco--gather-groups))
-        (title (buffer-name (current-buffer))))
-    (with-current-buffer
-        (get-buffer-create (format "*ecco for %s*" title))
-      (erase-buffer)
-      (insert (format "
-<!DOCTYPE html> 
-<html> 
-<head> 
-    <meta http-eqiv='content-type' content='text/html;charset=utf-8'> 
-    <title>%s</title> 
-    <link rel=stylesheet href=\"http://jashkenas.github.com/docco/resources/docco.css\"> 
-</head> 
-<body> 
-<div id=container> 
-    <div id=background></div> 
-    <table cellspacing=0 cellpadding=0> 
-    <thead> 
-      <tr> 
-        <th class=docs><h1>%s</h1></th> 
-        <th class=code></th> 
-      </tr> 
-    </thead> 
-    <tbody> " title title))
-      (dolist (group groups)
-        (insert "<tr><td class='docs'>")
-        (insert (ecco--render-comments (car group)))
-        (insert "</td><td class=code>")
-        (insert (ecco--render-code (cdr group)))
-        (insert "</td></tr>"))
-      (insert "</tbody> 
-    </table> 
-</div> 
-</body> 
-</html>")
-      (goto-char (point-min))
-      (pop-to-buffer (current-buffer)))))
-
-(defvar ecco-markdown-program "z:/holy/bin/common/markdown.pl")
-(defvar ecco-pygmentize-program "/usr/bin/pygmentize")
-(defvar ecco-use-pygments t)
-
+
+;;; Parsing
+;;; -------
+;;;
+;;; The idea is to gather pairs of comments and code snippets
+;;; and render them
+;;;
 (defun ecco--gather-groups ()
   "Returns a list of conses of strings (COMMENT . CODE)"
   (save-excursion
@@ -54,6 +22,8 @@
           (code-snippets nil)
           (temp-buffer (generate-new-buffer " *ecco-decomment-temp*"))
           (mode major-mode))
+      ;; put ourselves in the original buffer's mode for this temporary buffer
+      ;;
       (with-current-buffer temp-buffer
         (funcall mode))
       (while (not stop)
@@ -78,6 +48,15 @@
                     comments
                     code-snippets)))))
 
+;;; **ecco** renders:
+;;;
+;;; - comments through markdown
+;;;
+;;; - code through pygments or through emacs's built-int
+;;;   `htmlfontify`, in case pygments isn't available or the user
+;;;   set `ecco-use-pygments` to `nil`
+;;;
+;;;
 (defun ecco--render-code (text)
   "Return TEXT with span classes based on its fontification."
   (if ecco-use-pygments
@@ -95,6 +74,20 @@
   "Return markdown output for TEXT."
   (ecco--pipe-text-through-program text ecco-markdown-program))
 
+
+;;; For now, ecco needs the user to customize these to the paths he
+;;; needs using `setq` or similar
+;;;
+(defvar ecco-markdown-program "markdown")
+(defvar ecco-pygmentize-program "pygmentize")
+(defvar ecco-use-pygments t)
+
+
+
+;;; Piping to external processes
+;;; ----------------------------
+;;;
+;;; ecco uses `shell-command-on-region`
 (defun ecco--pipe-text-through-program (text program)
   (let ((temp-buffer (generate-new-buffer "*ecco-processing-temp*"))
         (max-mini-window-height 0))
@@ -104,6 +97,57 @@
     (with-current-buffer temp-buffer
       (buffer-substring-no-properties (point-min) (point-max)))))
 
+
+;;; Main entry point
+;;; ----------------
+;;;
+(defun ecco ()
+  (interactive)
+  (let ((groups (ecco--gather-groups))
+        (title (buffer-name (current-buffer))))
+    (with-current-buffer
+        (get-buffer-create (format "*ecco for %s*" title))
+      (erase-buffer)
+      (insert (format "
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-eqiv='content-type' content='text/html;charset=utf-8'>
+    <title>%s</title>
+    <link rel=stylesheet href=\"http://jashkenas.github.com/docco/resources/docco.css\">
+</head>
+<body>
+<div id=container>
+    <div id=background></div>
+    <table cellspacing=0 cellpadding=0>
+    <thead>
+      <tr>
+        <th class=docs><h1>%s</h1></th>
+        <th class=code></th>
+      </tr>
+    </thead>
+    <tbody> " title title))
+      ;; iterate the groups collected before
+      ;;
+      (dolist (group groups)
+        (insert "<tr><td class='docs'>")
+        (insert (ecco--render-comments (car group)))
+        (insert "</td><td class=code>")
+        (insert (ecco--render-code (cdr group)))
+        (insert "</td></tr>"))
+      (insert "</tbody>
+    </table>
+</div>
+</body>
+</html>")
+      (goto-char (point-min))
+      (pop-to-buffer (current-buffer)))))
+
+
+;;; Debug functions
+;;; ---------------
+;;;
+;;; for now, the only debug function is `ecco--gather-groups-debug`
 (defun ecco--gather-groups-debug ()
   (interactive)
   (let ((groups (ecco--gather-groups)))
