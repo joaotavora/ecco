@@ -96,13 +96,10 @@
 ;;;
 ;;; ecco uses `shell-command-on-region`
 (defun ecco--pipe-text-through-program (text program)
-  (let ((temp-buffer (generate-new-buffer "*ecco-processing-temp*"))
-        (max-mini-window-height 0))
-    (with-temp-buffer
-      (insert text)
-      (shell-command-on-region (point-min) (point-max) program temp-buffer))
-    (with-current-buffer temp-buffer
-      (buffer-substring-no-properties (point-min) (point-max)))))
+  (with-temp-buffer
+    (insert text)
+    (shell-command-on-region (point-min) (point-max) program (current-buffer) 'replace)
+    (buffer-string)))
 
 
 ;;; Main entry point
