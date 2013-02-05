@@ -61,12 +61,14 @@
 ;;;   `htmlfontify`, in case pygments isn't available or the user
 ;;;   set `ecco-use-pygments` to `nil`
 ;;;
-;;;
+(defun ecco--lexer-args () "-l cl")
+
 (defun ecco--render-code (text)
   "Return TEXT with span classes based on its fontification."
   (if ecco-use-pygments
-      (ecco--pipe-text-through-program text (format "%s -g -f html"
-                                                    ecco-pygmentize-program))
+      (ecco--pipe-text-through-program text (format "%s %s -f html"
+                                                    ecco-pygmentize-program
+                                                    (ecco--lexer-args)))
     (let ((hfy-optimisations (list 'keep-overlays
                                    'merge-adjacent-tags
                                    'body-text-only)))
