@@ -29,9 +29,9 @@
     <tbody> " title title))
       (dolist (group groups)
         (insert "<tr><td class='docs'>")
-        (insert (ecco--markdown-docs (car group)))
+        (insert (ecco--render-comments (car group)))
         (insert "</td><td class=code><div class=highlight><pre>")
-        (insert (ecco--htmlize-code (cdr group)))
+        (insert (ecco--render-code (cdr group)))
         (insert "</pre></div></td></tr>"))
       (insert "</tbody> 
     </table> 
@@ -76,14 +76,14 @@
                     comments
                     code-snippets)))))
 
-(defun ecco--htmlize-code (text)
+(defun ecco--render-code (text)
   "Return TEXT with span classes based on its fontification"
   (let ((hfy-optimisations (list 'keep-overlays
                                  'merge-adjacent-tags
                                  'body-text-only)))
     (htmlfontify-string text)))
 
-(defun ecco--markdown-docs (text)
+(defun ecco--render-comments (text)
   (let ((temp-buffer (generate-new-buffer " *ecco-markdown-temp*")))
     (with-temp-buffer
       (insert text)
