@@ -1,8 +1,11 @@
-;; **ecco** is a port of docco
-;;
-;; blablabla
-;;
-;;
+;;; **ecco** is a port of docco. It renders
+;;;
+;;; * comments through markdown
+;;;
+;;; * code through pygments or through emacs's built-int
+;;;   `htmlfontify`, in case pygments isn't available or the user
+;;;   set `ecco-use-pygments` to `nil`
+;;;
 (require 'newcomment)
 (require 'htmlfontify)
 
@@ -54,54 +57,68 @@
                     comments
                     snippets)))))
 
-;;; **ecco** renders:
-;;;
-;;; - comments through markdown
-;;;
-;;; - code through pygments or through emacs's built-int
-;;;   `htmlfontify`, in case pygments isn't available or the user
-;;;   set `ecco-use-pygments` to `nil`
-;;;
-(defun ecco--lexer-args () "-l cl")
-
-(defun ecco--render-snippet (text)
-  "Return TEXT with span classes based on its fontification."
-  (if ecco-use-pygments
-      (ecco--pipe-text-through-program text (format "%s %s -f html"
-                                                    ecco-pygmentize-program
-                                                    (ecco--lexer-args)))
-    (let ((hfy-optimisations (list 'keep-overlays
-                                   'merge-adjacent-tags
-                                   'body-text-only)))
-      (concat
-       "<div class=highlight><pre>"
-       (htmlfontify-string text)
-       "</pre></div>"))))
-
-(defun ecco--render-comment (text)
-  "Return markdown output for TEXT."
-  (ecco--pipe-text-through-program text ecco-markdown-program))
-
-
-;;; For now, ecco needs the user to customize these to the paths he
-;;; needs using `setq` or similar
-;;;
-(defvar ecco-markdown-program "markdown")
-(defvar ecco-pygmentize-program "pygmentize")
-(defvar ecco-use-pygments t)
-
-
 
-;;; Piping to external processes
-;;; ----------------------------
+;;; Rendering
+;;; ---------
 ;;;
-;;; ecco uses `shell-command-on-region`
+;;; There are two types of rendering:
+;;;
+;;; * a "blob" render is an optimization used for markdown and pygments (if
+;;;   that is in use). It consists of joining strings using a divider,
+;;;   rendering and splitting them using another divider, and should
+;;;   effectively be equivalent to piping each string through the external
+;;;   process, which is very slow.
+;;;
+;;; * if pygments is not in use, `htmlfontify-string` will take care of the
+;;;   job, and we don't use blob rendering here.
+;;;
+(defun ecco--render-groups (groups)
+  (let ((comments
+         (ecco--blob-render (mapcar #'car groups)
+                            (ecco--markdown-dividers)
+                            #'(lambda (text)
+                                (ecco--pipe-text-through-program text ecco-markdown-program))))
+        (snippets
+         (cond (ecco-use-pygments
+                (ecco--blob-render (mapcar #'cdr groups)
+                                   (ecco--pygments-dividers)
+                                   #'(lambda (text)
+                                       (let ((render (ecco--pipe-text-through-program text
+                                                                                      (format "%s %s -f html"
+                                                                                              ecco-pygmentize-program
+                                                                                              (ecco--lexer-args)))))
+                                         (setq render
+                                               (replace-regexp-in-string "^<div class=\"highlight\"><pre>" "" render))
+                                         (replace-regexp-in-string "</pre></div>$" "" render)))))
+               (t
+                (let ((hfy-optimisations (list 'keep-overlays
+                                               'merge-adjacent-tags
+                                               'body-text-only)))
+                  (mapcar #'htmlfontify-string (mapcar #'cdr groups)))))))
+    (map 'list #'cons comments snippets)))
+
+
+(defun ecco--blob-render (strings dividers renderer)
+  (split-string (funcall renderer
+                         (mapconcat #'identity strings (car dividers)))
+                (cdr dividers)))
+
+;;; **ecco** uses `shell-command-on-region` to pipe to external processes
+;;; 
 (defun ecco--pipe-text-through-program (text program)
   (with-temp-buffer
     (insert text)
     (shell-command-on-region (point-min) (point-max) program (current-buffer) 'replace)
     (buffer-string)))
 
+
+;;; User options
+;;; ------------
+;;;
+;;; This group controls the use of pygments.
+;;; 
+(defvar ecco-use-pygments t)
+(defvar ecco-pygmentize-program "pygmentize")
 (defvar ecco-pygments-lexer 'guess)
 (defvar ecco-pygments-lexer-table
   '((lisp-mode . "cl")
@@ -120,14 +137,36 @@
     (format "-l %s" ecco-pygments-lexer))
    (t
     "-g")))
+
+(defun ecco--pygments-dividers ()
+  (let* ((mode major-mode)
+         (snippet-divider (with-temp-buffer
+                            (funcall mode)
+                            (insert "ECCO-SNIPPET-DIVIDER")
+                            (comment-region (point-min) (point-max))
+                            (buffer-string))))
+    (cons (format "\n\n%s\n\n" snippet-divider)
+          (format "\n*<span class=\"c.?\">%s</span>\n*" snippet-divider))))
+
+
+;;; This group controls the use of markdown
+;;; 
+(defvar ecco-markdown-program "markdown")
+
+(defun ecco--markdown-dividers ()
+  (cons "\n\n##### ECCO-COMMENT-DIVIDER\n\n"
+        "\n*<h5>ECCO-COMMENT-DIVIDER</h5>\n*"))
+
+
 
 ;;; Main entry point
 ;;; ----------------
 ;;;
 (defun ecco ()
   (interactive)
-  (let ((groups (ecco--gather-groups))
-        (title (buffer-name (current-buffer))))
+  (let* ((groups (ecco--gather-groups))
+         (rendered-groups (ecco--render-groups groups))
+         (title (buffer-name (current-buffer))))
     (with-current-buffer
         (get-buffer-create (format "*ecco for %s*" title))
       (erase-buffer)
@@ -152,12 +191,12 @@
     <tbody> " title title))
       ;; iterate the groups collected before
       ;;
-      (dolist (group groups)
+      (dolist (group rendered-groups)
         (insert "<tr><td class='docs'>")
-        (insert (ecco--render-comment (car group)))
-        (insert "</td><td class=code>")
-        (insert (ecco--render-snippet (cdr group)))
-        (insert "</td></tr>"))
+        (insert (car group))
+        (insert "</td><td class='code'><div class='highlight'><pre>")
+        (insert (cdr group))
+        (insert "</pre></div></td></tr>"))
       (insert "</tbody>
     </table>
 </div>
@@ -173,7 +212,7 @@
 ;;; for now, the only debug function is `ecco--gather-groups-debug`
 (defun ecco--gather-groups-debug ()
   (interactive)
-  (let ((groups (ecco--gather-groups)))
+  (let ((groups (ecco--render-groups (ecco--gather-groups))))
     (with-current-buffer
         (get-buffer-create (format "*ecco--debug for %s*" (buffer-name (current-buffer))))
       (erase-buffer)
