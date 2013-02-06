@@ -211,7 +211,9 @@
 </body>
 </html>")
       (goto-char (point-min))
-      (pop-to-buffer (current-buffer)))))
+      (if (y-or-n-p "Launch browse-url-of-buffer?")
+          (browse-url-of-buffer)
+          (pop-to-buffer (current-buffer))))))
 
 
 ;;; Debug functions
