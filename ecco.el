@@ -20,23 +20,23 @@
     (let ((stop nil)
           (comments nil)
           (code-snippets nil)
-          (temp-buffer (generate-new-buffer " *ecco-decomment-temp*"))
           (mode major-mode))
-      ;; put ourselves in the original buffer's mode for this temporary buffer
+      ;; Maybe this could be turned into a `loop`...
       ;;
-      (with-current-buffer temp-buffer
-        (funcall mode))
       (while (not stop)
+        ;; Collect the next comment
+        ;;
         (let ((start (point)))
           (comment-forward (point-max))
           (let ((comment (buffer-substring-no-properties  start (point))))
-            (with-current-buffer temp-buffer
-              (erase-buffer)
+            (with-temp-buffer
+              (funcall mode)
               (insert comment)
-              (uncomment-region (point-min)
-                                (point-max))
+              (uncomment-region (point-min) (point-max))
               (skip-chars-backward " \t\r\n")
               (push (buffer-substring-no-properties  (point-min) (point)) comments))))
+        ;; Collect the next code snippet
+        ;;
         (let ((start (line-beginning-position)))
           (comment-search-forward (point-max) t)
           (let ((comment-beginning (comment-beginning)))
@@ -48,8 +48,9 @@
                                     (skip-chars-backward " \t\r\n")
                                     (point)))
                 code-snippets)))
-      (kill-buffer temp-buffer)
-      (reverse (map 'list #'(lambda (a b) (cons a b))
+      ;; Return this a list of conses
+      ;;
+      (reverse (map 'list #'cons
                     comments
                     code-snippets)))))
 
