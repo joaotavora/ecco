@@ -102,6 +102,24 @@
     (shell-command-on-region (point-min) (point-max) program (current-buffer) 'replace)
     (buffer-string)))
 
+(defvar ecco-pygments-lexer 'guess)
+(defvar ecco-pygments-lexer-table
+  '((lisp-mode . "cl")
+    (emacs-lisp-mode . "cl")
+    (sh-mode . "sh")
+    (c-mode . "c")))
+
+(defun ecco--lexer-args ()
+  (cond
+   ((eq ecco-pygments-lexer 'guess)
+    (let ((lexer (cdr (assoc major-mode ecco-pygments-lexer-table))))
+      (if lexer
+          (format "-l %s" lexer)
+        "-g")))
+   (ecco-pygments-lexer
+    (format "-l %s" ecco-pygments-lexer))
+   (t
+    "-g")))
 
 ;;; Main entry point
 ;;; ----------------
