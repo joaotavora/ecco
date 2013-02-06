@@ -3,8 +3,8 @@
 ;;; * comments through markdown
 ;;;
 ;;; * code through pygments or through emacs's built-int
-;;;   `htmlfontify`, in case pygments isn't available or the user
-;;;   set `ecco-use-pygments` to `nil`
+;;;   `htmlfontify', in case pygments isn't available or the user
+;;;   set `ecco-use-pygments' to `nil'
 ;;;
 (require 'newcomment)
 (require 'htmlfontify)
@@ -34,9 +34,12 @@
           (let ((comment (buffer-substring-no-properties  start (point))))
             (with-temp-buffer
               (funcall mode)
+              (loop for fn in ecco-comment-cleanup-functions
+                    do (setq comment (funcall fn comment)))
               (insert comment)
               (uncomment-region (point-min) (point-max))
               (skip-chars-backward " \t\r\n")
+              
               (push (buffer-substring-no-properties  (point-min) (point)) comments))))
         ;; Collect the next code snippet
         ;;
@@ -69,7 +72,7 @@
 ;;;   effectively be equivalent to piping each string through the external
 ;;;   process, which is very slow.
 ;;;
-;;; * if pygments is not in use, `htmlfontify-string` will take care of the
+;;; * if pygments is not in use, `htmlfontify-string' will take care of the
 ;;;   job, and we don't use blob rendering here.
 ;;;
 (defun ecco--render-groups (groups)
@@ -103,7 +106,7 @@
                          (mapconcat #'identity strings (car dividers)))
                 (cdr dividers)))
 
-;;; **ecco** uses `shell-command-on-region` to pipe to external processes
+;;; **ecco** uses `shell-command-on-region' to pipe to external processes
 ;;; 
 (defun ecco--pipe-text-through-program (text program)
   (with-temp-buffer
@@ -114,6 +117,11 @@
 
 ;;; User options
 ;;; ------------
+;;;
+(defvar ecco-comment-cleanup-functions '(ecco-backtick-and-quote-to-double-backtick))
+
+(defun ecco-backtick-and-quote-to-double-backtick (text)
+  (replace-regexp-in-string "`\\([^\n]+?\\)'" "`\\1`" text))
 ;;;
 ;;; This group controls the use of pygments.
 ;;; 
