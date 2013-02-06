@@ -14,12 +14,12 @@
 ;;; and render them
 ;;;
 (defun ecco--gather-groups ()
-  "Returns a list of conses of strings (COMMENT . CODE)"
+  "Returns a list of conses of strings (COMMENT . SNIPPET)"
   (save-excursion
     (goto-char (point-min))
     (let ((stop nil)
           (comments nil)
-          (code-snippets nil)
+          (snippets nil)
           (mode major-mode))
       ;; Maybe this could be turned into a `loop`...
       ;;
@@ -47,12 +47,12 @@
                                   (save-excursion
                                     (skip-chars-backward " \t\r\n")
                                     (point)))
-                code-snippets)))
+                snippets)))
       ;; Return this a list of conses
       ;;
       (reverse (map 'list #'cons
                     comments
-                    code-snippets)))))
+                    snippets)))))
 
 ;;; **ecco** renders:
 ;;;
@@ -64,7 +64,7 @@
 ;;;
 (defun ecco--lexer-args () "-l cl")
 
-(defun ecco--render-code (text)
+(defun ecco--render-snippet (text)
   "Return TEXT with span classes based on its fontification."
   (if ecco-use-pygments
       (ecco--pipe-text-through-program text (format "%s %s -f html"
@@ -78,7 +78,7 @@
        (htmlfontify-string text)
        "</pre></div>"))))
 
-(defun ecco--render-comments (text)
+(defun ecco--render-comment (text)
   "Return markdown output for TEXT."
   (ecco--pipe-text-through-program text ecco-markdown-program))
 
@@ -136,9 +136,9 @@
       ;;
       (dolist (group groups)
         (insert "<tr><td class='docs'>")
-        (insert (ecco--render-comments (car group)))
+        (insert (ecco--render-comment (car group)))
         (insert "</td><td class=code>")
-        (insert (ecco--render-code (cdr group)))
+        (insert (ecco--render-snippet (cdr group)))
         (insert "</td></tr>"))
       (insert "</tbody>
     </table>
