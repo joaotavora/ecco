@@ -33,6 +33,7 @@
 
 (defun ecco--gather-groups ()
   (ecco--place-overlays)
+  (ecco--refine-overlays)
   (let ((mode major-mode)
         (overlays (sort (ecco--overlays)
                         #'(lambda (ov1 ov2)
@@ -79,6 +80,25 @@
   (loop for overlay in (ecco--overlays)
         when (overlay-buffer overlay)
         do (delete-overlay overlay)))
+
+(defun ecco--refine-overlays ()
+  (loop for regexp in ecco-comment-skip-regexps
+        do (loop for overlay in (ecco--overlays)
+                 do
+                 (goto-char (overlay-start overlay))
+                 (while (re-search-forward regexp (overlay-end overlay) t)
+                   (let ((saved-end (overlay-end overlay)))
+                     ;; the unrefined overlay is reused and shortened at the
+                     ;; end, or deleted if its length would become 0.
+                     ;;
+                     (if (= (overlay-start overlay) (match-beginning 0))
+                         (delete-overlay overlay)
+                         (move-overlay overlay (overlay-start overlay) (match-beginning 0)))
+                     (unless (= (match-end 0) saved-end)
+                       (let ((new-overlay (make-overlay (match-end 0) saved-end)))
+                         (overlay-put new-overlay 'face '(:background  "pink"))
+                         (overlay-put new-overlay 'ecco t)
+                         (setq overlay new-overlay))))))))
 
 
 
@@ -128,7 +148,7 @@
                 (cdr dividers)))
 
 ;;; **ecco** uses `shell-command-on-region' to pipe to external processes
-;;; 
+;;;
 (defun ecco--pipe-text-through-program (text program)
   (with-temp-buffer
     (insert text)
@@ -144,6 +164,8 @@
 (defun ecco-backtick-and-quote-to-double-backtick ()
   (while (re-search-forward "`\\([^\n]+?\\)'" nil t)
     (replace-match "`\\1`" nil nil)))
+
+(defvar ecco-comment-skip-regexps '())
 
 ;;; This group controls the use of pygments.
 ;;;
@@ -180,7 +202,7 @@
 
 
 ;;; This group controls the use of markdown
-;;; 
+;;;
 (defvar ecco-markdown-program "markdown")
 
 (defun ecco--markdown-dividers ()
