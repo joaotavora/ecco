@@ -13,52 +13,73 @@
 ;;; Parsing
 ;;; -------
 ;;;
-;;; The idea is to gather pairs of comments and code snippets
-;;; and render them
+;;; The idea is to find comment regions and gather code snippets between
+;;; them. We resort to `newcomment.el' comment-navigating functions, place
+;;; overlays over the comments and return comments and code as pairs of strings.
 ;;;
-(defun ecco--gather-groups ()
-  "Returns a list of conses of strings (COMMENT . SNIPPET)"
+(defun ecco--place-overlays ()
+  (ecco--cleanup-overlays)
   (save-excursion
     (goto-char (point-min))
-    (let ((stop nil)
-          (comments nil)
-          (snippets nil)
-          (mode major-mode))
-      ;; Maybe this could be turned into a `loop`...
-      ;;
-      (while (not stop)
-        ;; Collect the next comment
-        ;;
-        (let ((start (point)))
-          (comment-forward (point-max))
-          (let ((comment (buffer-substring-no-properties  start (point))))
-            (with-temp-buffer
-              (funcall mode)
-              (loop for fn in ecco-comment-cleanup-functions
-                    do (setq comment (funcall fn comment)))
-              (insert comment)
-              (uncomment-region (point-min) (point-max))
-              (skip-chars-backward " \t\r\n")
-              
-              (push (buffer-substring-no-properties  (point-min) (point)) comments))))
-        ;; Collect the next code snippet
-        ;;
-        (let ((start (line-beginning-position)))
-          (comment-search-forward (point-max) t)
-          (let ((comment-beginning (comment-beginning)))
-            (if comment-beginning
-                (goto-char comment-beginning)
-              (setq stop t)))
-          (push (buffer-substring start
-                                  (save-excursion
-                                    (skip-chars-backward " \t\r\n")
-                                    (point)))
-                snippets)))
-      ;; Return this a list of conses
-      ;;
-      (reverse (map 'list #'cons
-                    comments
-                    snippets)))))
+    (loop while (comment-search-forward (point-max) t)
+          do
+          (let ((overlay (make-overlay (goto-char (nth 8 (syntax-ppss)))
+                                       (progn (forward-comment (point-max))
+                                              (line-beginning-position)))))
+            ;; The "green" is for debug purporses, user should never actually
+            ;; see this as the overlays are cleaned up afterwards.
+            (overlay-put overlay 'face '(:background  "green"))
+            (overlay-put overlay 'ecco t)))))
+
+(defun ecco--gather-groups ()
+  (ecco--place-overlays)
+  (let ((mode major-mode)
+        (overlays (sort (ecco--overlays)
+                        #'(lambda (ov1 ov2)
+                            (< (overlay-start ov1) (overlay-start ov2))))))
+    ;; In case our file does not start with a comment, insert a dummy one of 0
+    ;; length.
+    ;;
+    (unless (= 1 (overlay-start (first overlays)))
+      (let ((ov (make-overlay 1 1)))
+        (overlay-put ov 'ecco t)
+        (push ov overlays)))
+    (loop for (overlay next) on overlays
+          for comment = (let ((comment-text (buffer-substring-no-properties (overlay-start overlay)
+                                                                            (overlay-end overlay))))
+
+                          ;; Place the comment text in a temp buffer with the
+                          ;; original major mode and call `uncomment-region'
+                          (with-temp-buffer
+                            (insert comment-text)
+                            (funcall mode)
+                            (uncomment-region (point-min) (point-max))
+                            ;; User-settable `ecco-comment-cleanup-functions',
+                            ;; can further be used to cleanup the comment of any
+                            ;; artifacts.
+                            (mapc #'(lambda (fn)
+                                      (save-excursion
+                                        (goto-char (point-min))
+                                        (funcall fn)))
+                                  ecco-comment-cleanup-functions)
+                            (buffer-substring-no-properties (point-min) (point-max))))
+          for snippet = (buffer-substring (overlay-end overlay)
+                                          (or (and next
+                                                   (overlay-start next))
+                                              (point-max)))
+          collect (cons comment snippet))))
+
+
+(defun ecco--overlays ()
+  (loop for overlay in (overlays-in (point-min) (point-max))
+        when (overlay-get overlay 'ecco)
+        collect overlay))
+
+(defun ecco--cleanup-overlays ()
+  (loop for overlay in (ecco--overlays)
+        when (overlay-buffer overlay)
+        do (delete-overlay overlay)))
+
 
 
 ;;; Rendering
@@ -120,11 +141,12 @@
 ;;;
 (defvar ecco-comment-cleanup-functions '(ecco-backtick-and-quote-to-double-backtick))
 
-(defun ecco-backtick-and-quote-to-double-backtick (text)
-  (replace-regexp-in-string "`\\([^\n]+?\\)'" "`\\1`" text))
-;;;
+(defun ecco-backtick-and-quote-to-double-backtick ()
+  (while (re-search-forward "`\\([^\n]+?\\)'" nil t)
+    (replace-match "`\\1`" nil nil)))
+
 ;;; This group controls the use of pygments.
-;;; 
+;;;
 (defvar ecco-use-pygments t)
 (defvar ecco-pygmentize-program "pygmentize")
 (defvar ecco-pygments-lexer 'guess)
@@ -213,7 +235,8 @@
       (goto-char (point-min))
       (if (y-or-n-p "Launch browse-url-of-buffer?")
           (browse-url-of-buffer)
-          (pop-to-buffer (current-buffer))))))
+          (pop-to-buffer (current-buffer)))))
+  (ecco--cleanup-overlays))
 
 
 ;;; Debug functions
@@ -222,7 +245,7 @@
 ;;; for now, the only debug function is `ecco--gather-groups-debug`
 (defun ecco--gather-groups-debug ()
   (interactive)
-  (let ((groups (ecco--render-groups (ecco--gather-groups))))
+  (let ((groups (ecco--gather-groups)))
     (with-current-buffer
         (get-buffer-create (format "*ecco--debug for %s*" (buffer-name (current-buffer))))
       (erase-buffer)
@@ -233,3 +256,5 @@
         (insert (cdr group)))
       (goto-char (point-min))
       (pop-to-buffer (current-buffer)))))
+
+;;ends here
