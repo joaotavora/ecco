@@ -50,9 +50,13 @@
                                                                             (overlay-end overlay))))
 
                           ;; Place the comment text in a temp buffer with the
-                          ;; original major mode and call `uncomment-region'
+                          ;; original major mode, strip all leading whitespace
+                          ;; and call `uncomment-region'
                           (with-temp-buffer
                             (insert comment-text)
+                            (goto-char (point-min))
+                            (while (re-search-forward "^\\([[:blank:]]+\\)[^[:blank:]]" nil t)
+                              (replace-match "" nil nil nil 1))
                             (funcall mode)
                             (uncomment-region (point-min) (point-max))
                             ;; User-settable `ecco-comment-cleanup-functions',
