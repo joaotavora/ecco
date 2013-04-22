@@ -222,10 +222,62 @@
   (cons "\n\n##### ECCO-COMMENT-DIVIDER\n\n"
         "\n*<h5>ECCO-COMMENT-DIVIDER</h5>\n*"))
 
+
+;;; This controls the output style, we do this by simply stealing CSS code off
+;;; http://jashkenas.github.io/docco/public/stylesheets/normalize.css subdir
+
+(defun ecco--css-stylesheets (&optional style)
+  (let ((style (or style "linear")))
+    (loop for css-file in
+          '("http://jashkenas.github.io/docco/resources/%s/public/stylesheets/normalize.css"
+            "http://jashkenas.github.io/docco/resources/%s/docco.css")
+          collect (format css-file style))))
+
 
 
 ;;; Main entry point
 ;;; ----------------
+;;;
+;;; But first, a quick'n'dirty XML output library...
+;;;
+(defun ecco--format (thing)
+  (cond ((keywordp thing)
+         (substring (symbol-name thing) 1))
+        ((stringp thing)
+         (format "\"%s\"" thing))
+        (t
+         (format "%s" thing))))
+
+(defun ecco--output (format-string &rest format-args)
+  (insert (apply #'format format-string format-args)))
+
+(defun ecco--output-xml-from-list (content &optional depth)
+  (let ((elem (pop content))
+        (depth (or depth 0)))
+    (ecco--output "<%s" (ecco--format elem))
+    (loop for (key value . rest) on content by #'cddr
+          while (and (keywordp key) value (atom value))
+          do (ecco--output " %s=%s"
+                           (ecco--format key)
+                           (ecco--format value))
+          (setq content rest))
+    (ecco--output ">" content)
+    (loop with conses.in.content = (loop for elem in content
+                                         when (consp elem)
+                                         return t)
+          for next in content
+          do
+          (when conses.in.content
+            (ecco--output "\n%s" (make-string (* 2 (1+ depth)) ? )))
+          (cond ((atom next)
+                 (ecco--output "%s" next))
+                ((consp next)
+                 (ecco--output-xml-from-list next (1+ depth))))
+          finally (when conses.in.content
+                    (ecco--output "\n%s" (make-string (* 2 depth) ? )))
+          (ecco--output "</%s>" (ecco--format elem)))))
+
+;;; And now, the main command making use everything defined before
 ;;;
 (defun ecco ()
   (interactive)
@@ -235,42 +287,55 @@
     (with-current-buffer
         (get-buffer-create (format "*ecco for %s*" title))
       (erase-buffer)
-      (insert (format "
-<!DOCTYPE html>
-<html>
-<head>
-    <meta http-eqiv='content-type' content='text/html;charset=utf-8'>
-    <title>%s</title>
-    <link rel=stylesheet href=\"http://jashkenas.github.com/docco/resources/docco.css\">
-</head>
-<body>
-<div id=container>
-    <div id=background></div>
-    <table cellspacing=0 cellpadding=0>
-    <thead>
-      <tr>
-        <th class=docs><h1>%s</h1></th>
-        <th class=code></th>
-      </tr>
-    </thead>
-    <tbody> " title title))
-      ;; iterate the groups collected before
-      ;;
-      (dolist (group rendered-groups)
-        (insert "<tr><td class='docs'>")
-        (insert (car group))
-        (insert "</td><td class='code'><div class='highlight'><pre>")
-        (insert (cdr group))
-        (insert "</pre></div></td></tr>"))
-      (insert "</tbody>
-    </table>
-</div>
-</body>
-</html>")
+      (insert "<!DOCTYPE html>\n")
+      (ecco--output-xml-from-list
+       `(:html
+         (:head
+          (:title ,title)
+          ,"<meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\">"
+          ,@(mapcar #'(lambda (url)
+                        `(:link :rel "stylesheet" :type "text/css" :media "all" :href ,url))
+                    (ecco--css-stylesheets))
+          ,@(when ecco-use-pygments
+              `((:style :type "text/css"
+                        ,(shell-command-to-string (format "%s -f html -S monokai -a .highlight"
+                                                          ecco-pygmentize-program)))
+                (:style :type "text/css"
+                        "pre, tt, code { background: none; border: none;}"))))g
+                        (:body
+                         (:div :class "container"
+                               (:div :id "background")
+                               (:ul :class "sections"
+                                    (:li :id "title"
+                                         (:div :class "annotation"
+                                               (:h1 ,title)))
+                                    ,@(loop for section in rendered-groups
+                                            for i from 0
+                                            for heading-p = (string-match
+                                                             "^[[:blank:]]*<\\(h[[:digit:]]\\)>"
+                                                             (car section))
+                                            collect
+                                            `(:li :id ,(format "section-%s" (1+ i))
+                                                  (:div :class "annotation"
+                                                        (:div :class
+                                                              ,(format "pilwrap %s"
+                                                                       (if heading-p
+                                                                           (format "for-%s"
+                                                                                   (match-string 1
+                                                                                                 (car section)))
+                                                                         ""))
+                                                              (:a :class "pilcrow"
+                                                                  :href ,(format "#section-%s" (1+ i))
+                                                                  "&#182;"))
+                                                        ,(car section))
+                                                  (:div :class "content"
+                                                        (:div :class "highlight"
+                                                              (:pre ,(cdr section)))))))))))
+
       (goto-char (point-min))
       (if (y-or-n-p "Launch browse-url-of-buffer?")
           (browse-url-of-buffer)
-          (pop-to-buffer (current-buffer)))))
+        (pop-to-buffer (current-buffer)))))
   (ecco--cleanup-overlays))
 
 
