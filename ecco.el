@@ -128,16 +128,17 @@
                                 (ecco--pipe-text-through-program text ecco-markdown-program))))
         (snippets
          (cond (ecco-use-pygments
-                (ecco--blob-render (mapcar #'cdr groups)
-                                   (ecco--pygments-dividers)
-                                   #'(lambda (text)
-                                       (let ((render (ecco--pipe-text-through-program text
-                                                                                      (format "%s %s -f html"
-                                                                                              ecco-pygmentize-program
-                                                                                              (ecco--lexer-args)))))
-                                         (setq render
-                                               (replace-regexp-in-string "^<div class=\"highlight\"><pre>" "" render))
-                                         (replace-regexp-in-string "</pre></div>$" "" render)))))
+                (ecco--blob-render
+                 (mapcar #'cdr groups)
+                 (ecco--pygments-dividers)
+                 #'(lambda (text)
+                     (let ((render (ecco--pipe-text-through-program text
+                                                                    (format "%s %s -f html"
+                                                                            ecco-pygmentize-program
+                                                                            (ecco--lexer-args)))))
+                       (setq render (replace-regexp-in-string
+                                     "^<div class=\"highlight\"><pre>" "" render))
+                       (replace-regexp-in-string "</pre></div>$" "" render)))))
                (t
                 (let ((hfy-optimisations (list 'keep-overlays
                                                'merge-adjacent-tags
