@@ -159,12 +159,20 @@
 ;;; User options
 ;;; ------------
 ;;;
-(defvar ecco-comment-cleanup-functions '(ecco-backtick-and-quote-to-double-backtick))
+(defvar ecco-comment-cleanup-functions '(ecco-backtick-and-quote-to-double-backtick
+                                         ecco-make-file-link-maybe))
 
 (defun ecco-backtick-and-quote-to-double-backtick ()
   (while (re-search-forward "`\\([^\n]+?\\)'" nil t)
     (replace-match "`\\1`" nil nil)))
 
+(defun ecco-make-file-link-maybe ()
+  (let ((files-in-dir (directory-files default-directory nil)))
+    (while (and (re-search-forward "[-_[:word:]]+\\.[[:word:]]+" nil t)
+                (member (match-string 0) files-in-dir))
+      (replace-match (format "[%s](%s.html)"
+                             (match-string 0)
+                             (match-string 0))))))
 (defvar ecco-comment-skip-regexps '())
 
 ;;; This group controls the use of pygments.
