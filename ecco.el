@@ -331,23 +331,59 @@
 ;;; before.
 ;;;
 ;;;###autoload
-(defun ecco ()
-  (interactive)
-  (let* ((groups (ecco--gather-groups))
-         (rendered-groups (ecco--render-groups groups))
-         (title (buffer-name (current-buffer))))
-    (with-current-buffer (get-buffer-create "*ecco*")
-      (let (standard-output (current-buffer))
-        (erase-buffer)
-        (insert "<!DOCTYPE html>\n")
-        (insert
-         (ecco--output-xml-from-list
-          (ecco--parallel-template title rendered-groups))))
-      (goto-char (point-min))
-      (if (y-or-n-p "Launch browse-url-of-buffer?")
-          (browse-url-of-buffer)
-        (pop-to-buffer (current-buffer)))))
-  (ecco--cleanup-overlays))
+(defun ecco (buffer &optional interactive)
+  (interactive (list (current-buffer) t))
+  (with-current-buffer buffer
+    (unwind-protect
+      (let* ((groups (ecco--gather-groups))
+             (rendered-groups (ecco--render-groups groups))
+             (title (buffer-name (current-buffer))))
+        (with-current-buffer (get-buffer-create (format "*ecco for %s*" title))
+          (let (standard-output (current-buffer))
+            (erase-buffer)
+            (insert "<!DOCTYPE html>\n")
+            (insert
+             (ecco--output-xml-from-list
+              (ecco--parallel-template title rendered-groups))))
+          (goto-char (point-min))
+          (if interactive
+              (if (y-or-n-p "Launch browse-url-of-buffer?")
+                  (browse-url-of-buffer)
+                (pop-to-buffer (current-buffer)))
+            (current-buffer))))
+      (ecco--cleanup-overlays))))
+
+;;;###autoload
+(defun ecco-files (input-spec output-directory &optional interactive)
+  (interactive
+   (let* ((input-spec (read-file-name "File or wildcard: "))
+          (input-directory (file-name-directory input-spec ))
+          (output-directory (read-directory-name "Output directory: "
+                                                 input-directory
+                                                 input-directory
+                                                 t)))
+
+     (list input-spec output-directory t)))
+  (let* ((new-file-buffers '())
+         (kill-buffer-query-functions nil))
+    (loop for file in (file-expand-wildcards input-spec)
+          for buffer = (or (find-buffer-visiting file)
+                           (car (push (find-file-noselect file)
+                                      new-file-buffers)))
+          for resulting-buffer = (ecco buffer)
+          do
+          (with-current-buffer resulting-buffer
+            (let* ((output-name (format "%s/%s.html" output-directory
+                                        (file-name-sans-extension
+                                         (file-name-nondirectory
+                                          (buffer-file-name buffer))))))
+              (write-file output-name)
+              (kill-buffer))))
+    (when (and interactive
+               new-file-buffers
+               (y-or-n-p (format "Close extra buffers opened %s?" new-file-buffers)))
+      (let ((kill-buffer-query-functions nil))
+        (mapc #'kill-buffer new-file-buffers)))))
 
 
 ;;; Debug functions
