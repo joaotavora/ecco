@@ -46,6 +46,13 @@
       (let ((ov (make-overlay 1 1)))
         (overlay-put ov 'ecco t)
         (push ov overlays)))
+    ;; Be sure to refontify the whole buffer if we're not using pygments, since
+    ;; `htmlfontify-string' is going to need the next properties later
+    ;;
+    (unless ecco-use-pygments
+      (jit-lock-fontify-now))
+    ;; Now loop on the overlays, collect comments and code snippets
+    ;;
     (loop for (overlay next) on overlays
           for comment = (let ((comment-text (buffer-substring-no-properties (overlay-start overlay)
                                                                             (overlay-end overlay))))
@@ -73,11 +80,6 @@
                                   (or (and next
                                            (overlay-start next))
                                       (point-max)))
-          ;; Be sure to refontify the region if we're not using pygments, since
-          ;; `htmlfontify-string' is going to need the next properties later
-          ;;
-          unless ecco-use-pygments
-          do (jit-lock-refontify from to)
           for snippet = (buffer-substring from to)
           collect (cons comment snippet))))
 
