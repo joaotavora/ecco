@@ -1,11 +1,12 @@
 ;;; **ecco** is a port of docco. It renders
 ;;;
-;;; * comments through markdown
+;;; * comments through [markdown][markdown]
 ;;;
-;;; * code through pygments or through emacs's built-int
-;;;   `htmlfontify', in case pygments isn't available or the user
-;;;   set `ecco-use-pygments' to `nil'
+;;; * code through emacs's built-int `htmlfontify' library, or
+;;;   [pygments][pygments] if the user sets `ecco-use-pygments' to `t'.
 ;;;
+;;; [pygments]: http://pygments.org/
+;;; [markdown]: http://daringfireball.net/projects/markdown/
 (require 'newcomment)
 (require 'htmlfontify)
 
@@ -68,13 +69,22 @@
                                         (funcall fn)))
                                   ecco-comment-cleanup-functions)
                             (buffer-substring-no-properties (point-min) (point-max))))
-          for snippet = (buffer-substring (overlay-end overlay)
-                                          (or (and next
-                                                   (overlay-start next))
-                                              (point-max)))
+          for (from . to) = (cons (overlay-end overlay)
+                                  (or (and next
+                                           (overlay-start next))
+                                      (point-max)))
+          ;; Be sure to refontify the region if we're not using pygments, since
+          ;; `htmlfontify-string' is going to need the next properties later
+          ;;
+          unless ecco-use-pygments
+          do (jit-lock-refontify from to)
+          for snippet = (buffer-substring from to)
           collect (cons comment snippet))))
 
 
+;;; We need some overlay-handling code, it'll be important when implementing
+;;; `ecco-comment-skip-regexps' (which doesn't really work for now)
+;;;
 (defun ecco--overlays ()
   (loop for overlay in (overlays-in (point-min) (point-max))
         when (overlay-get overlay 'ecco)
@@ -318,6 +328,7 @@
 ;;; The main command `ecco' that the user invokes makes use everything defined
 ;;; before.
 ;;;
+;;;###autoload
 (defun ecco ()
   (interactive)
   (let* ((groups (ecco--gather-groups))
@@ -355,4 +366,6 @@
       (goto-char (point-min))
       (pop-to-buffer (current-buffer)))))
 
-;;ends here
+;;; Provide the ecco feature
+;;;
+(provide 'ecco)
