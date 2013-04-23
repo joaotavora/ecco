@@ -283,7 +283,7 @@
 
 ;;; This group controls the use of pygments.
 ;;;
-(defvar ecco-use-pygments t)
+(defvar ecco-use-pygments nil)
 (defvar ecco-pygmentize-program "pygmentize")
 (defvar ecco-pygments-lexer 'guess)
 (defvar ecco-pygments-lexer-table
