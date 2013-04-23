@@ -160,6 +160,94 @@
     (shell-command-on-region (point-min) (point-max) program (current-buffer) 'replace)
     (buffer-string)))
 
+;;; To output the final HTML code, we'll need some kind of a quick'n'dirty XML
+;;; output library...
+;;;
+(defun ecco--output-xml-from-list (content)
+  (labels ((format-thing (thing)
+                         (cond ((keywordp thing)
+                                (substring (symbol-name thing) 1))
+                               ((stringp thing)
+                                (format "\"%s\"" thing))
+                               (t
+                                (format "%s" thing))))
+           (princ-format (format-string &rest format-args)
+                         (princ (apply #'format format-string format-args)))
+           (output-xml (content depth)
+                       (let ((elem (pop content)))
+                         (princ-format "<%s" (format-thing elem))
+                         (loop for (key value . rest) on content by #'cddr
+                               while (and (keywordp key) value (atom value))
+                               do (princ-format " %s=%s"
+                                                (format-thing key)
+                                                (format-thing value))
+                               (setq content rest))
+                         (princ-format ">")
+                         (loop with conses.in.content = (loop for elem in content
+                                                              when (consp elem)
+                                                              return t)
+                               for next in content
+                               do
+                               (when conses.in.content
+                                 (princ-format "\n%s" (make-string (* 2 (1+ depth)) ? )))
+                               (cond ((atom next)
+                                      (princ-format "%s" next))
+                                     ((consp next)
+                                      (output-xml next (1+ depth))))
+                               finally (when conses.in.content
+                                         (princ-format "\n%s" (make-string (* 2 depth) ? )))
+                               (princ-format "</%s>" (format-thing elem))))))
+    (with-output-to-string
+      (output-xml content 0))))
+
+;;; And a function that will return a template to be fed to
+;;; `ecco--output-xml-from-list'
+;;;
+(defun ecco--parallel-template (title rendered-groups)
+  `(:html
+    (:head
+     (:title ,title)
+     (:meta :http-equiv "content-type" :content "text/html charset=UTF-8")
+     ,@(mapcar #'(lambda (url)
+                   `(:link :rel "stylesheet" :type "text/css" :media "all" :href ,url))
+               '("http://jashkenas.github.io/docco/resources/parallel/public/stylesheets/normalize.css"
+                 "http://jashkenas.github.io/docco/resources/parallel/docco.css"))
+     ,@(when ecco-use-pygments
+         `((:style :type "text/css"
+                   ,(shell-command-to-string (format "%s -f html -S monokai -a .highlight"
+                                                     ecco-pygmentize-program)))
+           (:style :type "text/css"
+                   "pre, tt, code { background: none; border: none;}"))))
+    (:body
+     (:div :class "container"
+           (:div :id "background")
+           (:ul :class "sections"
+                (:li :id "title"
+                     (:div :class "annotation"
+                           (:h1 ,title)))
+                ,@(loop for section in rendered-groups
+                        for i from 0
+                        for heading-p = (string-match
+                                         "^[[:blank:]]*<\\(h[[:digit:]]\\)>"
+                                         (car section))
+                        collect
+                        `(:li :id ,(format "section-%s" (1+ i))
+                              (:div :class "annotation"
+                                    (:div :class
+                                          ,(format "pilwrap %s"
+                                                   (if heading-p
+                                                       (format "for-%s"
+                                                               (match-string 1
+                                                                             (car section)))
+                                                     ""))
+                                          (:a :class "pilcrow"
+                                              :href ,(format "#section-%s" (1+ i))
+                                              "&#182;"))
+                                    ,(car section))
+                              (:div :class "content"
+                                    (:div :class "highlight"
+                                          (:pre ,(cdr section)))))))))))
+
 
 ;;; User options
 ;;; ------------
@@ -178,6 +266,7 @@
       (replace-match (format "[%s](%s.html)"
                              (match-string 0)
                              (match-string 0))))))
+
 (defvar ecco-comment-skip-regexps '())
 
 ;;; This group controls the use of pygments.
@@ -223,115 +312,24 @@
         "\n*<h5>ECCO-COMMENT-DIVIDER</h5>\n*"))
 
 
-;;; This controls the output style, we do this by simply stealing CSS code off
-;;; http://jashkenas.github.io/docco/public/stylesheets/normalize.css subdir
-
-(defun ecco--css-stylesheets (&optional style)
-  (let ((style (or style "linear")))
-    (loop for css-file in
-          '("http://jashkenas.github.io/docco/resources/%s/public/stylesheets/normalize.css"
-            "http://jashkenas.github.io/docco/resources/%s/docco.css")
-          collect (format css-file style))))
-
-
-
 ;;; Main entry point
 ;;; ----------------
 ;;;
-;;; But first, a quick'n'dirty XML output library...
-;;;
-(defun ecco--format (thing)
-  (cond ((keywordp thing)
-         (substring (symbol-name thing) 1))
-        ((stringp thing)
-         (format "\"%s\"" thing))
-        (t
-         (format "%s" thing))))
-
-(defun ecco--output (format-string &rest format-args)
-  (insert (apply #'format format-string format-args)))
-
-(defun ecco--output-xml-from-list (content &optional depth)
-  (let ((elem (pop content))
-        (depth (or depth 0)))
-    (ecco--output "<%s" (ecco--format elem))
-    (loop for (key value . rest) on content by #'cddr
-          while (and (keywordp key) value (atom value))
-          do (ecco--output " %s=%s"
-                           (ecco--format key)
-                           (ecco--format value))
-          (setq content rest))
-    (ecco--output ">" content)
-    (loop with conses.in.content = (loop for elem in content
-                                         when (consp elem)
-                                         return t)
-          for next in content
-          do
-          (when conses.in.content
-            (ecco--output "\n%s" (make-string (* 2 (1+ depth)) ? )))
-          (cond ((atom next)
-                 (ecco--output "%s" next))
-                ((consp next)
-                 (ecco--output-xml-from-list next (1+ depth))))
-          finally (when conses.in.content
-                    (ecco--output "\n%s" (make-string (* 2 depth) ? )))
-          (ecco--output "</%s>" (ecco--format elem)))))
-
-;;; And now, the main command making use everything defined before
+;;; The main command `ecco' that the user invokes makes use everything defined
+;;; before.
 ;;;
 (defun ecco ()
   (interactive)
   (let* ((groups (ecco--gather-groups))
          (rendered-groups (ecco--render-groups groups))
          (title (buffer-name (current-buffer))))
-    (with-current-buffer
-        (get-buffer-create (format "*ecco for %s*" title))
-      (erase-buffer)
-      (insert "<!DOCTYPE html>\n")
-      (ecco--output-xml-from-list
-       `(:html
-         (:head
-          (:title ,title)
-          ,"<meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\">"
-          ,@(mapcar #'(lambda (url)
-                        `(:link :rel "stylesheet" :type "text/css" :media "all" :href ,url))
-                    (ecco--css-stylesheets))
-          ,@(when ecco-use-pygments
-              `((:style :type "text/css"
-                        ,(shell-command-to-string (format "%s -f html -S monokai -a .highlight"
-                                                          ecco-pygmentize-program)))
-                (:style :type "text/css"
-                        "pre, tt, code { background: none; border: none;}"))))g
-                        (:body
-                         (:div :class "container"
-                               (:div :id "background")
-                               (:ul :class "sections"
-                                    (:li :id "title"
-                                         (:div :class "annotation"
-                                               (:h1 ,title)))
-                                    ,@(loop for section in rendered-groups
-                                            for i from 0
-                                            for heading-p = (string-match
-                                                             "^[[:blank:]]*<\\(h[[:digit:]]\\)>"
-                                                             (car section))
-                                            collect
-                                            `(:li :id ,(format "section-%s" (1+ i))
-                                                  (:div :class "annotation"
-                                                        (:div :class
-                                                              ,(format "pilwrap %s"
-                                                                       (if heading-p
-                                                                           (format "for-%s"
-                                                                                   (match-string 1
-                                                                                                 (car section)))
-                                                                         ""))
-                                                              (:a :class "pilcrow"
-                                                                  :href ,(format "#section-%s" (1+ i))
-                                                                  "&#182;"))
-                                                        ,(car section))
-                                                  (:div :class "content"
-                                                        (:div :class "highlight"
-                                                              (:pre ,(cdr section)))))))))))
-
+    (with-current-buffer (get-buffer-create "*ecco*")
+      (let (standard-output (current-buffer))
+        (erase-buffer)
+        (insert "<!DOCTYPE html>\n")
+        (insert
+         (ecco--output-xml-from-list
+          (ecco--parallel-template title rendered-groups))))
       (goto-char (point-min))
       (if (y-or-n-p "Launch browse-url-of-buffer?")
           (browse-url-of-buffer)
