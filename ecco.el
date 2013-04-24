@@ -212,8 +212,8 @@
     (with-output-to-string
       (output-xml content 0))))
 
-;;; And a function that will return a template to be fed to
-;;; `ecco--output-xml-from-list'
+;;; These two functions return different styles of templates that can
+;;; be fed to `ecco--output-xml-from-list'
 ;;;
 (defun ecco--parallel-template (title rendered-groups)
   `(:html
@@ -260,6 +260,32 @@
                                     (:div :class "highlight"
                                           (:pre ,(cdr section)))))))))))
 
+(defun ecco--linear-template (title rendered-groups)
+  `(:html
+    (:head
+     (:title ,title)
+     (:meta :http-equiv "content-type" :content "text/html charset=UTF-8")
+     ,@(mapcar #'(lambda (url)
+                   `(:link :rel "stylesheet" :type "text/css" :media "all" :href ,url))
+               '("http://jashkenas.github.io/docco/resources/linear/public/stylesheets/normalize.css"
+                 "http://jashkenas.github.io/docco/resources/linear/docco.css"))
+     ,@(when ecco-use-pygments
+         `((:style :type "text/css"
+                   ,(shell-command-to-string (format "%s -f html -S monokai -a .highlight"
+                                                     ecco-pygmentize-program)))
+           (:style :type "text/css"
+                   "pre, tt, code { background: none; border: none;}"))))
+    (:body
+     (:div :class "container"
+           (:div :class "page"
+                 (:div :class "header" (:h1 ,title))
+                 ,@(loop for section in rendered-groups
+                         append
+                         (list `(:div :class "annotation" ,(car section))
+                               `(:div :class "content"
+                                      (:div :class "highlight"
+                                            (:pre ,(cdr section)))))))))))
+
 
 ;;; User options
 ;;; ------------
@@ -280,6 +306,8 @@
                              (match-string 0))))))
 
 (defvar ecco-comment-skip-regexps '())
+
+(defvar ecco-template-function 'ecco--linear-template)
 
 ;;; This group controls the use of pygments.
 ;;;
@@ -344,7 +372,7 @@
             (insert "<!DOCTYPE html>\n")
             (insert
              (ecco--output-xml-from-list
-              (ecco--parallel-template title rendered-groups))))
+              (funcall ecco-template-function title rendered-groups))))
           (goto-char (point-min))
           (if interactive
               (if (y-or-n-p "Launch browse-url-of-buffer?")
