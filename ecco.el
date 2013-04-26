@@ -370,7 +370,7 @@
 
 (defun ecco--markdown-dividers ()
   (cons "\n\n##### ECCO-COMMENT-DIVIDER\n\n"
-        "\n*<h5>ECCO-COMMENT-DIVIDER</h5>\n*"))
+        "\n*<h5.*>ECCO-COMMENT-DIVIDER</h5>\n*"))
 
 
 ;;; Main entry point
