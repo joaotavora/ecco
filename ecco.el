@@ -229,7 +229,8 @@
                    ,(shell-command-to-string (format "%s -f html -S monokai -a .highlight"
                                                      ecco-pygmentize-program)))
            (:style :type "text/css"
-                   "pre, tt, code { background: none; border: none;}"))))
+                   "pre, tt, code { background: none; border: none;}")))
+     ,@ecco-extra-meta-html)
     (:body
      (:div :class "container"
            (:div :id "background")
@@ -274,7 +275,8 @@
                    ,(shell-command-to-string (format "%s -f html -S monokai -a .highlight"
                                                      ecco-pygmentize-program)))
            (:style :type "text/css"
-                   "pre, tt, code { background: none; border: none;}"))))
+                   "pre, tt, code { background: none; border: none;}")))
+     ,@ecco-extra-meta-html)
     (:body
      (:div :class "container"
            (:div :class "page"
@@ -329,6 +331,10 @@
 (defvar ecco-comment-skip-regexps '())
 
 (defvar ecco-template-function 'ecco--linear-template)
+(defvar ecco-extra-meta-html nil)
+
+(setq ecco-extra-meta-html `((:style :type "text/css"
+                                     ".annotation img { width: 100%; height: auto;}")))
 
 ;;; This group controls the use of pygments.
 ;;;
