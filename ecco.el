@@ -291,19 +291,40 @@
 ;;; ------------
 ;;;
 (defvar ecco-comment-cleanup-functions '(ecco-backtick-and-quote-to-double-backtick
-                                         ecco-make-file-link-maybe))
+                                         ecco-make-file-link-maybe
+                                         ecco-make-absolute-links-maybe))
 
 (defun ecco-backtick-and-quote-to-double-backtick ()
   (while (re-search-forward "`\\([^\n]+?\\)'" nil t)
     (replace-match "`\\1`" nil nil)))
 
+(defvar ecco-output-directory nil)
 (defun ecco-make-file-link-maybe ()
-  (let ((files-in-dir (directory-files default-directory nil)))
-    (while (and (re-search-forward "[-_[:word:]]+\\.[[:word:]]+" nil t)
-                (member (match-string 0) files-in-dir))
-      (replace-match (format "[%s](%s.html)"
-                             (match-string 0)
-                             (match-string 0))))))
+  (while (and (re-search-forward "[[:blank:]\n]\\(\\([-_/[:word:]]+\\)\\.[[:word:]]+\\)[[:blank:]\n]"
+                                 nil t)
+              (file-exists-p (match-string 1)))
+    (cond (ecco-output-directory
+           (replace-match (format "[%s](%s/%s.html)"
+                                  (match-string 1)
+                                  ecco-output-directory
+                                  (file-name-sans-extension
+                                   (file-name-nondirectory (match-string 1))))
+                          nil nil nil 1))
+          (t
+           (replace-match (format "[%s](%s)"
+                                  (match-string 1)
+                                  (match-string 1))
+                          nil nil nil 1)))))
+
+(defvar ecco--make-relative-links)
+(defun ecco-make-absolute-links-maybe ()
+  (unless (boundp 'ecco--make-relative-links)
+    (while (and (re-search-forward "\(\\([-_/[:word:]]+\\.[[:word:]]+\\)\)"
+                                   nil t)
+                (file-exists-p (match-string 1)))
+      (replace-match (format "%s%s" (expand-file-name default-directory)
+                             (match-string 1))
+                     nil nil nil 1))))
 
 (defvar ecco-comment-skip-regexps '())
 
@@ -382,18 +403,19 @@
       (ecco--cleanup-overlays))))
 
 ;;;###autoload
-(defun ecco-files (input-spec output-directory &optional interactive)
+(defun ecco-files (input-spec ecco-output-directory &optional interactive)
   (interactive
    (let* ((input-spec (read-file-name "File or wildcard: "))
           (input-directory (file-name-directory input-spec ))
-          (output-directory (read-directory-name "Output directory: "
-                                                 input-directory
-                                                 input-directory
-                                                 t)))
+          (ecco-output-directory (read-directory-name "Output directory: "
+                                                      input-directory
+                                                      input-directory
+                                                      t)))
 
-     (list input-spec output-directory t)))
+     (list input-spec ecco-output-directory t)))
   (let* ((new-file-buffers '())
-         (kill-buffer-query-functions nil))
+         (kill-buffer-query-functions nil)
+         (ecco--make-relative-links t))
     (loop for file in (file-expand-wildcards input-spec)
           for buffer = (or (find-buffer-visiting file)
                            (car (push (find-file-noselect file)
@@ -401,7 +423,7 @@
           for resulting-buffer = (ecco buffer)
           do
           (with-current-buffer resulting-buffer
-            (let* ((output-name (format "%s/%s.html" output-directory
+            (let* ((output-name (format "%s/%s.html" ecco-output-directory
                                         (file-name-sans-extension
                                          (file-name-nondirectory
                                           (buffer-file-name buffer))))))
