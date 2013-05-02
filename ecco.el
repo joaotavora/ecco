@@ -293,15 +293,19 @@
 ;;; ------------
 ;;;
 (defvar ecco-comment-cleanup-functions '(ecco-backtick-and-quote-to-double-backtick
-                                         ecco-make-file-link-maybe
-                                         ecco-make-absolute-links-maybe))
+                                         ecco-make-autolinks
+                                         ecco-fix-links))
 
 (defun ecco-backtick-and-quote-to-double-backtick ()
   (while (re-search-forward "`\\([^\n]+?\\)'" nil t)
     (replace-match "`\\1`" nil nil)))
 
-(defvar ecco-output-directory nil)
-(defun ecco-make-file-link-maybe ()
+(defun ecco-make-autolinks ()
+  "Replaces links to existing files with guessed .html versions.
+
+If you invoke `ecco' on a file a.something and it mentions
+b.something and b.something exists, then a.html will contain a
+link to b.html."
   (while (and (re-search-forward "[[:blank:]\n]\\(\\([-_/[:word:]]+\\)\\.[[:word:]]+\\)[[:blank:]\n]"
                                  nil t)
               (file-exists-p (match-string 1)))
@@ -318,15 +322,24 @@
                                   (match-string 1))
                           nil nil nil 1)))))
 
-(defvar ecco--make-relative-links)
-(defun ecco-make-absolute-links-maybe ()
-  (unless (boundp 'ecco--make-relative-links)
-    (while (and (re-search-forward "\(\\([-_/[:word:]]+\\.[[:word:]]+\\)\)"
-                                   nil t)
-                (file-exists-p (match-string 1)))
-      (replace-match (format "%s%s" (expand-file-name default-directory)
-                             (match-string 1))
-                     nil nil nil 1))))
+(defvar ecco-output-directory nil)
+(defun ecco-fix-links ()
+  "Guess if  markdown link should be relative or absolute.
+
+If you do M-x ecco, links should be absolute, but when
+you call M-x ecco-files, you tipically want them to be relative."
+  (loop while (re-search-forward "\(\\([-_/:[:word:]]+\\.[[:word:]]+\\)\)"
+                                 nil t)
+        for relative-name = (match-string 1)
+        when (file-exists-p relative-name)
+        do
+        (cond (ecco-output-directory
+               (replace-match (file-relative-name relative-name ecco-output-directory)
+                              nil nil nil 1))
+              (t
+               (replace-match (format "%s%s" (expand-file-name default-directory)
+                                      relative-name)
+                              nil nil nil 1)))))
 
 (defvar ecco-comment-skip-regexps '())
 
@@ -420,8 +433,7 @@
 
      (list input-spec ecco-output-directory t)))
   (let* ((new-file-buffers '())
-         (kill-buffer-query-functions nil)
-         (ecco--make-relative-links t))
+         (kill-buffer-query-functions nil))
     (loop for file in (file-expand-wildcards input-spec)
           for buffer = (or (find-buffer-visiting file)
                            (car (push (find-file-noselect file)
