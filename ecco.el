@@ -80,7 +80,9 @@
                                   (or (and next
                                            (overlay-start next))
                                       (point-max)))
-          for snippet = (buffer-substring from to)
+          for snippet = (replace-regexp-in-string "\\`\n+\\|\\s-+$\\|\n+\\'"
+                                                  ""
+                                                  (buffer-substring from to))
           collect (cons comment snippet))))
 
 
