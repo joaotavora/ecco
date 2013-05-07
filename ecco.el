@@ -32,7 +32,7 @@
             (overlay-put overlay 'face '(:background  "green"))
             (overlay-put overlay 'ecco t)))))
 
-(defun ecco--gather-groups ()
+(defun ecco--gather-sections ()
   (ecco--place-overlays)
   (ecco--refine-overlays)
   (let ((mode major-mode)
@@ -132,16 +132,16 @@
 ;;; * if pygments is not in use, `htmlfontify-string' will take care of the
 ;;;   job, and we don't use blob rendering here.
 ;;;
-(defun ecco--render-groups (groups)
+(defun ecco--render-sections (sections)
   (let ((comments
-         (ecco--blob-render (mapcar #'car groups)
+         (ecco--blob-render (mapcar #'car sections)
                             (ecco--markdown-dividers)
                             #'(lambda (text)
                                 (ecco--pipe-text-through-program text ecco-markdown-program))))
         (snippets
          (cond (ecco-use-pygments
                 (ecco--blob-render
-                 (mapcar #'cdr groups)
+                 (mapcar #'cdr sections)
                  (ecco--pygments-dividers)
                  #'(lambda (text)
                      (let ((render (ecco--pipe-text-through-program text
@@ -155,7 +155,7 @@
                 (let ((hfy-optimisations (list 'keep-overlays
                                                'merge-adjacent-tags
                                                'body-text-only)))
-                  (mapcar #'htmlfontify-string (mapcar #'cdr groups)))))))
+                  (mapcar #'htmlfontify-string (mapcar #'cdr sections)))))))
     (map 'list #'cons comments snippets)))
 
 
@@ -215,7 +215,7 @@
 ;;; These two functions return different styles of templates that can
 ;;; be fed to `ecco--output-xml-from-list'
 ;;;
-(defun ecco--parallel-template (title rendered-groups)
+(defun ecco--parallel-template (title rendered-sections)
   `(:html
     (:head
      (:title ,title)
@@ -238,7 +238,7 @@
                 (:li :id "title"
                      (:div :class "annotation"
                            (:h1 ,title)))
-                ,@(loop for section in rendered-groups
+                ,@(loop for section in rendered-sections
                         for i from 0
                         for heading-p = (string-match
                                          "^[[:blank:]]*<\\(h[[:digit:]]\\)>"
@@ -261,7 +261,7 @@
                                     (:div :class "highlight"
                                           (:pre ,(cdr section)))))))))))
 
-(defun ecco--linear-template (title rendered-groups)
+(defun ecco--linear-template (title rendered-sections)
   `(:html
     (:head
      (:title ,title)
@@ -281,7 +281,7 @@
      (:div :class "container"
            (:div :class "page"
                  (:div :class "header" (:h1 ,title))
-                 ,@(loop for section in rendered-groups
+                 ,@(loop for section in rendered-sections
                          append
                          (list `(:div :class "annotation" ,(car section))
                                `(:div :class "content"
@@ -349,7 +349,7 @@ you call M-x ecco-files, you tipically want them to be relative."
 (setq ecco-extra-meta-html `((:style :type "text/css"
                                      ".annotation img { width: 100%; height: auto;}")))
 
-;;; This group controls the use of pygments.
+;;; This section controls the use of pygments.
 ;;;
 (defvar ecco-use-pygments nil)
 (defvar ecco-pygmentize-program "pygmentize")
@@ -383,7 +383,7 @@ you call M-x ecco-files, you tipically want them to be relative."
           (format "\n*<span class=\"c.?\">%s</span>\n*" snippet-divider))))
 
 
-;;; This group controls the use of markdown
+;;; This section controls the use of markdown
 ;;;
 (defvar ecco-markdown-program "markdown")
 
@@ -403,8 +403,8 @@ you call M-x ecco-files, you tipically want them to be relative."
   (interactive (list (current-buffer) t))
   (with-current-buffer buffer
     (unwind-protect
-      (let* ((groups (ecco--gather-groups))
-             (rendered-groups (ecco--render-groups groups))
+      (let* ((sections (ecco--gather-sections))
+             (rendered-sections (ecco--render-sections sections))
              (title (buffer-name (current-buffer))))
         (with-current-buffer (get-buffer-create (format "*ecco for %s*" title))
           (let (standard-output (current-buffer))
@@ -412,7 +412,7 @@ you call M-x ecco-files, you tipically want them to be relative."
             (insert "<!DOCTYPE html>\n")
             (insert
              (ecco--output-xml-from-list
-              (funcall ecco-template-function title rendered-groups))))
+              (funcall ecco-template-function title rendered-sections))))
           (goto-char (point-min))
           (if interactive
               (if (y-or-n-p "Launch browse-url-of-buffer?")
@@ -457,18 +457,18 @@ you call M-x ecco-files, you tipically want them to be relative."
 ;;; Debug functions
 ;;; ---------------
 ;;;
-;;; for now, the only debug function is `ecco--gather-groups-debug`
-(defun ecco--gather-groups-debug ()
+;;; for now, the only debug function is `ecco--gather-sections-debug`
+(defun ecco--gather-sections-debug ()
   (interactive)
-  (let ((groups (ecco--gather-groups)))
+  (let ((sections (ecco--gather-sections)))
     (with-current-buffer
         (get-buffer-create (format "*ecco--debug for %s*" (buffer-name (current-buffer))))
       (erase-buffer)
-      (dolist (group groups)
+      (dolist (section sections)
         (insert "\n-**- COMMENT -**-\n")
-        (insert (car group))
+        (insert (car section))
         (insert "\n-**- SNIPPET -**-\n")
-        (insert (cdr group)))
+        (insert (cdr section)))
       (goto-char (point-min))
       (pop-to-buffer (current-buffer)))))
 
