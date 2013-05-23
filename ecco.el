@@ -15,8 +15,10 @@
 ;;; -------
 ;;;
 ;;; The idea is to find comment regions and gather code snippets between
-;;; them. We resort to `newcomment.el' comment-navigating functions, place
-;;; overlays over the comments and return comments and code as pairs of strings.
+;;; them. We call each of these pairs a "section".
+;;;
+;;; We resort to `newcomment.el' comment-navigating functions, place overlays
+;;; over the comments and return comments and code as pairs of strings.
 ;;;
 (defun ecco--place-overlays ()
   (save-excursion
@@ -172,8 +174,44 @@
     (shell-command-on-region (point-min) (point-max) program (current-buffer) 'replace)
     (buffer-string)))
 
-;;; To output the final HTML code, we'll need some kind of a quick'n'dirty XML
-;;; output library...
+;;; We also need these two to make blob rendering work with pygments
+;;;
+(defun ecco--lexer-args ()
+  (cond
+   ((eq ecco-pygments-lexer 'guess)
+    (let ((lexer (cdr (assoc major-mode ecco-pygments-lexer-table))))
+      (if lexer
+          (format "-l %s" lexer)
+        "-g")))
+   (ecco-pygments-lexer
+    (format "-l %s" ecco-pygments-lexer))
+   (t
+    "-g")))
+
+(defun ecco--pygments-dividers ()
+  (let* ((mode major-mode)
+         (snippet-divider (with-temp-buffer
+                            (funcall mode)
+                            (insert "ECCO-SNIPPET-DIVIDER")
+                            (comment-region (point-min) (point-max))
+                            (buffer-string))))
+    (cons (format "\n\n%s\n\n" snippet-divider)
+          (format "\n*<span class=\"c.?\">%s</span>\n*" snippet-divider))))
+
+;;; To output the final HTML code, we design a quick'n'dirty XML output
+;;; library. this function will take a list like
+;;;
+;;;     (:html
+;;;      (:head
+;;;       (:title ,title))
+;;;      (:body
+;;;       (:div :class "container"
+;;;             (:p "some paragraph text"))))
+;;;
+;;; and output the corresponding HTML. It's not as fantastic as
+;;; [cl-who][cl-who], but gets the job done!
+;;;
+;;; [cl-who]: http://weitz.de/cl-who/
 ;;;
 (defun ecco--output-xml-from-list (content)
   (labels ((format-thing (thing)
@@ -212,8 +250,8 @@
     (with-output-to-string
       (output-xml content 0))))
 
-;;; These two functions return different styles of templates that can
-;;; be fed to `ecco--output-xml-from-list'
+;;; These two functions return different styles of templates that can be fed to
+;;; `ecco--output-xml-from-list'
 ;;;
 (defun ecco--parallel-template (title rendered-sections)
   `(:html
@@ -288,24 +326,32 @@
                                       (:div :class "highlight"
                                             (:pre ,(cdr section)))))))))))
 
-
-;;; User options
-;;; ------------
+
+;;; Postprocessing comment regions
+;;; -----------------------------
+;;;
+;;; This variable contains a list of functions that are called with comment
+;;; annotations gathered by `ecco--gather-sections', just before sending them to
+;;; the markdown interpreter.
 ;;;
 (defvar ecco-comment-cleanup-functions '(ecco-backtick-and-quote-to-double-backtick
                                          ecco-make-autolinks
                                          ecco-fix-links))
 
+;;; This little function replaces emacs "backtick-and-quote"-style comments with
+;;; markdown's "double-backtick", in case you use which the former be converted
+;;; to the latter.
+;;;
 (defun ecco-backtick-and-quote-to-double-backtick ()
   (while (re-search-forward "`\\([^\n]+?\\)'" nil t)
     (replace-match "`\\1`" nil nil)))
 
+;;; `ecco-make-autolinks' replaces links to existing files with guessed .html
+;;; versions.  If you invoke `ecco' on a file "a.something" and it mentions
+;;; "b.something" and "b.something" exists relative to "a.something"'s path,
+;;; then "a.html" will contain a link to "b.html"
+;;;
 (defun ecco-make-autolinks ()
-  "Replaces links to existing files with guessed .html versions.
-
-If you invoke `ecco' on a file a.something and it mentions
-b.something and b.something exists, then a.html will contain a
-link to b.html."
   (while (and (re-search-forward "[[:blank:]\n]\\(\\([-_/[:word:]]+\\)\\.[[:word:]]+\\)[[:blank:]\n]"
                                  nil t)
               (file-exists-p (match-string 1)))
@@ -322,6 +368,11 @@ link to b.html."
                                   (match-string 1))
                           nil nil nil 1)))))
 
+;;; The `ecco' command creates a temporary buffer and file and so needs absolute
+;;; links. The `ecco-files' command, on the other hand, place files in a
+;;; directory chosen by the user. This cleanup function makes the links be
+;;; relative again if necessary.
+;;;
 (defvar ecco-output-directory nil)
 (defun ecco-fix-links ()
   "Guess if  markdown link should be relative or absolute.
@@ -341,15 +392,20 @@ you call M-x ecco-files, you tipically want them to be relative."
                                       relative-name)
                               nil nil nil 1)))))
 
-(defvar ecco-comment-skip-regexps '())
+
+;;; User options
+;;; ------------
+;;;
+;;; This section controls the use of markdown
+;;;
+(defvar ecco-markdown-program "markdown")
+(defun ecco--markdown-dividers ()
+  (cons "\n\n##### ECCO-COMMENT-DIVIDER\n\n"
+        "\n*<h5.*>ECCO-COMMENT-DIVIDER</h5>\n*"))
 
-(defvar ecco-template-function 'ecco--linear-template)
-(defvar ecco-extra-meta-html nil)
-
-(setq ecco-extra-meta-html `((:style :type "text/css"
-                                     ".annotation img { width: 100%; height: auto;}")))
-
-;;; This section controls the use of pygments.
+;;; This section controls the use of pygments. Pygments is turned off by
+;;; default, I've noticed emacs's `htmlfontify' works quite nicely most of the
+;;; time.
 ;;;
 (defvar ecco-use-pygments nil)
 (defvar ecco-pygmentize-program "pygmentize")
@@ -360,36 +416,13 @@ you call M-x ecco-files, you tipically want them to be relative."
     (sh-mode . "sh")
     (c-mode . "c")))
 
-(defun ecco--lexer-args ()
-  (cond
-   ((eq ecco-pygments-lexer 'guess)
-    (let ((lexer (cdr (assoc major-mode ecco-pygments-lexer-table))))
-      (if lexer
-          (format "-l %s" lexer)
-        "-g")))
-   (ecco-pygments-lexer
-    (format "-l %s" ecco-pygments-lexer))
-   (t
-    "-g")))
-
-(defun ecco--pygments-dividers ()
-  (let* ((mode major-mode)
-         (snippet-divider (with-temp-buffer
-                            (funcall mode)
-                            (insert "ECCO-SNIPPET-DIVIDER")
-                            (comment-region (point-min) (point-max))
-                            (buffer-string))))
-    (cons (format "\n\n%s\n\n" snippet-divider)
-          (format "\n*<span class=\"c.?\">%s</span>\n*" snippet-divider))))
-
-
-;;; This section controls the use of markdown
+;;; Here are a bunch of user options that I haven't bothered to document
+;;; yet. Sorry.
 ;;;
-(defvar ecco-markdown-program "markdown")
-
-(defun ecco--markdown-dividers ()
-  (cons "\n\n##### ECCO-COMMENT-DIVIDER\n\n"
-        "\n*<h5.*>ECCO-COMMENT-DIVIDER</h5>\n*"))
+(defvar ecco-comment-skip-regexps '())
+(defvar ecco-template-function 'ecco--linear-template)
+(defvar ecco-extra-meta-html `((:style :type "text/css"
+                                       ".annotation img { width: 100%; height: auto;}")))
 
 
 ;;; Main entry point
@@ -474,7 +507,7 @@ you call M-x ecco-files, you tipically want them to be relative."
         (insert (cdr section)))
       (goto-char (point-min))
       (pop-to-buffer (current-buffer)))))
-
-;;; Provide the ecco feature
+
+;;; This little command provides the `ecco' feature.
 ;;;
 (provide 'ecco)
