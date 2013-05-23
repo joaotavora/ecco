@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>ecco.el</title>
+    <meta http-equiv="content-type" content="text/html charset=UTF-8"></meta>
+    <link rel="stylesheet" type="text/css" media="all" href="http://jashkenas.github.io/docco/resources/linear/public/stylesheets/normalize.css"></link>
+    <link rel="stylesheet" type="text/css" media="all" href="http://jashkenas.github.io/docco/resources/linear/docco.css"></link>
+    <style type="text/css">.annotation img { width: 100%; height: auto;}</style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="page">
+        <div class="header">
+          <h1>ecco.el</h1>
+        </div>
+        <div class="annotation"><p><strong>ecco</strong> is a port of docco. It renders</p>
+
+<ul>
+<li><p>comments through <a href="http://daringfireball.net/projects/markdown/">markdown</a></p></li>
+<li><p>code through emacs&#8217;s built-int <code>htmlfontify</code> library, or
+ <a href="http://pygments.org/">pygments</a> if the user sets <code>ecco-use-pygments</code> to <code>t</code>.</p></li>
+</ul></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">require</span> '<span class="constant">newcomment</span>)
+(<span class="keyword">require</span> '<span class="constant">htmlfontify</span>)
+
+</pre>
+          </div>
+        </div>
+        <div class="annotation"><h2 id="parsing">Parsing</h2>
+
+<p>The idea is to find comment regions and gather code snippets between
+them. We call each of these pairs a &#8220;section&#8221;.</p>
+
+<p>We resort to <code>newcomment.el</code> comment-navigating functions, place overlays
+over the comments and return comments and code as pairs of strings.</p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">defun</span> <span class="function-name">ecco--place-overlays</span> ()
+  (<span class="keyword">save-excursion</span>
+    (goto-char (point-min))
+    (<span class="keyword">loop</span> while (comment-search-forward (point-max) t)
+          do
+          (<span class="keyword">let</span> ((overlay (make-overlay (goto-char (nth 8 (syntax-ppss)))
+                                       (<span class="keyword">progn</span> (forward-comment (point-max))
+                                              (line-beginning-position)))))
+</pre>
+          </div>
+        </div>
+        <div class="annotation"><p>The &#8220;background color&#8221; is for bling and debug purposes, user
+should never actually after the command finishes</p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>            (overlay-put overlay 'face '(<span class="builtin">:background</span>  <span class="string">&quot;lavender&quot;</span>))
+            (overlay-put overlay 'ecco t)))))
+
+(<span class="keyword">defun</span> <span class="function-name">ecco--gather-sections</span> ()
+  (<span class="keyword">let</span> ((mode major-mode)
+        (overlays (sort (ecco--overlays)
+                        #'(<span class="keyword">lambda</span> (ov1 ov2)
+                            (&lt; (overlay-start ov1) (overlay-start ov2))))))
+</pre>
+          </div>
+        </div>
+        <div class="annotation"><p>In case our file does not start with a comment, insert a dummy one of 0
+length.</p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>    (<span class="keyword">unless</span> (= 1 (overlay-start (first overlays)))
+      (<span class="keyword">let</span> ((ov (make-overlay 1 1)))
+        (overlay-put ov 'ecco t)
+        (push ov overlays)))
+</pre>
+          </div>
+        </div>
+        <div class="annotation"><p>Be sure to refontify the whole buffer if we&#8217;re not using pygments, since
+<code>htmlfontify-string</code> is going to need the next properties later</p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>    (<span class="keyword">unless</span> ecco-use-pygments
+      (jit-lock-fontify-now))
+</pre>
+          </div>
+        </div>
+        <div class="annotation"><p>Now loop on the overlays, collect comments and code snippets</p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>    (<span class="keyword">loop</span> for (overlay next) on overlays
+          for comment = (<span class="keyword">let</span> ((comment-text (buffer-substring-no-properties (overlay-start overlay)
+                                                                            (overlay-end overlay))))
+
+</pre>
+          </div>
+        </div>
+        <div class="annotation"><p>Place the comment text in a temp buffer with the
+original major mode, strip all leading whitespace
+and call <code>uncomment-region</code></p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>                          (<span class="keyword">with-temp-buffer</span>
+                            (insert comment-text)
+                            (goto-char (point-min))
+                            (<span class="keyword">while</span> (re-search-forward <span class="string">&quot;^</span><span class="regexp-grouping-backslash">\\</span><span class="regexp-grouping-construct">(</span><span class="string">[[:blank:]]+</span><span class="regexp-grouping-backslash">\\</span><span class="regexp-grouping-construct">)</span><span class="string">[</span><span class="negation-char">^</span><span class="string">[:blank:]]&quot;</span> nil t)
+                              (replace-match <span class="string">&quot;&quot;</span> nil nil nil 1))
+                            (funcall mode)
+                            (uncomment-region (point-min) (point-max))
+</pre>
+          </div>
+        </div>
+        <div class="annotation"><p>User-settable <code>ecco-comment-cleanup-functions</code>,
+can further be used to cleanup the comment of any
+artifacts.</p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>                            (mapc #'(<span class="keyword">lambda</span> (fn)
+                                      (<span class="keyword">save-excursion</span>
+                                        (goto-char (point-min))
+                                        (funcall fn)))
+                                  ecco-comment-cleanup-functions)
+                            (buffer-substring-no-properties (point-min) (point-max))))
+          for (from . to) = (cons (overlay-end overlay)
+                                  (or (and next
+                                           (overlay-start next))
+                                      (point-max)))
+          for snippet = (replace-regexp-in-string <span class="string">&quot;\\`\n+</span><span class="regexp-grouping-backslash">\\</span><span class="regexp-grouping-construct">|</span><span class="string">\\s-+$</span><span class="regexp-grouping-backslash">\\</span><span class="regexp-grouping-construct">|</span><span class="string">\n+\\'&quot;
+                                                  &quot;&quot;</span>
+                                                  (buffer-substring from to))
+          collect (cons comment snippet))))</pre>
+          </div>
+        </div>
+        <div class="annotation"><p>We need some overlay-handling code, it&#8217;ll be important when implementing
+<code>ecco-comment-skip-regexps</code> (which doesn&#8217;t really work for now)</p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">defun</span> <span class="function-name">ecco--overlays</span> ()
+  (<span class="keyword">loop</span> for overlay in (overlays-in (point-min) (point-max))
+        when (overlay-get overlay 'ecco)
+        collect overlay))
+
+(<span class="keyword">defun</span> <span class="function-name">ecco--cleanup-overlays</span> ()
+  (<span class="keyword">loop</span> for overlay in (ecco--overlays)
+        when (overlay-buffer overlay)
+        do (delete-overlay overlay)))
+
+(<span class="keyword">defun</span> <span class="function-name">ecco--refine-overlays</span> ()
+  (<span class="keyword">loop</span> for regexp in ecco-comment-skip-regexps
+        do (<span class="keyword">loop</span> for overlay in (ecco--overlays)
+                 do
+                 (goto-char (overlay-start overlay))
+                 (<span class="keyword">while</span> (re-search-forward regexp (overlay-end overlay) t)
+                   (<span class="keyword">let</span> ((saved-end (overlay-end overlay)))
+</pre>
+          </div>
+        </div>
+        <div class="annotation"><p>the unrefined overlay is reused and shortened at the
+end, or deleted if its length would become 0.</p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>                     (<span class="keyword">if</span> (= (overlay-start overlay) (match-beginning 0))
+                         (delete-overlay overlay)
+                         (move-overlay overlay (overlay-start overlay) (match-beginning 0)))
+                     (<span class="keyword">unless</span> (= (match-end 0) saved-end)
+                       (<span class="keyword">let</span> ((new-overlay (make-overlay (match-end 0) saved-end)))
+                         (overlay-put new-overlay 'face '(<span class="builtin">:background</span>  <span class="string">&quot;pink&quot;</span>))
+                         (overlay-put new-overlay 'ecco t)
+                         (setq overlay new-overlay))))))))
+
+
+</pre>
+          </div>
+        </div>
+        <div class="annotation"><h2 id="rendering">Rendering</h2>
+
+<p>There are two types of rendering:</p>
+
+<ul>
+<li><p>a &#8220;blob&#8221; render is an optimization used for markdown and pygments (if
+ that is in use). It consists of joining strings using a divider,
+ rendering and splitting them using another divider, and should
+ effectively be equivalent to piping each string through the external
+ process, which is very slow.</p></li>
+<li><p>if pygments is not in use, <code>htmlfontify-string</code> will take care of the
+ job, and we don&#8217;t use blob rendering here.</p></li>
+</ul></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">defun</span> <span class="function-name">ecco--render-sections</span> (sections)
+  (<span class="keyword">let</span> ((comments
+         (ecco--blob-render (mapcar #'car sections)
+                            (ecco--markdown-dividers)
+                            #'(<span class="keyword">lambda</span> (text)
+                                (ecco--pipe-text-through-program text ecco-markdown-program))))
+        (snippets
+         (<span class="keyword">cond</span> (ecco-use-pygments
+                (ecco--blob-render
+                 (mapcar #'cdr sections)
+                 (ecco--pygments-dividers)
+                 #'(<span class="keyword">lambda</span> (text)
+                     (<span class="keyword">let</span> ((render (ecco--pipe-text-through-program text
+                                                                    (format <span class="string">&quot;%s %s -f html&quot;</span>
+                                                                            ecco-pygmentize-program
+                                                                            (ecco--lexer-args)))))
+                       (setq render (replace-regexp-in-string
+                                     <span class="string">&quot;^&lt;div class=\&quot;highlight\&quot;&gt;&lt;pre&gt;&quot; &quot;&quot;</span> render))
+                       (replace-regexp-in-string <span class="string">&quot;&lt;/pre&gt;&lt;/div&gt;$&quot; &quot;&quot;</span> render)))))
+               (t
+                (<span class="keyword">let</span> ((hfy-optimisations (list 'keep-overlays
+                                               'merge-adjacent-tags
+                                               'body-text-only)))
+                  (mapcar #'htmlfontify-string (mapcar #'cdr sections)))))))
+    (map 'list #'cons comments snippets)))
+
+
+(<span class="keyword">defun</span> <span class="function-name">ecco--blob-render</span> (strings dividers renderer)
+  (split-string (funcall renderer
+                         (mapconcat #'identity strings (car dividers)))
+                (cdr dividers)))</pre>
+          </div>
+        </div>
+        <div class="annotation"><p><strong>ecco</strong> uses <code>shell-command-on-region</code> to pipe to external processes</p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">defun</span> <span class="function-name">ecco--pipe-text-through-program</span> (text program)
+  (<span class="keyword">with-temp-buffer</span>
+    (insert text)
+    (shell-command-on-region (point-min) (point-max) program (current-buffer) 'replace)
+    (buffer-string)))</pre>
+          </div>
+        </div>
+        <div class="annotation"><p>We also need these two to make blob rendering work with pygments</p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">defun</span> <span class="function-name">ecco--lexer-args</span> ()
+  (<span class="keyword">cond</span>
+   ((eq ecco-pygments-lexer 'guess)
+    (<span class="keyword">let</span> ((lexer (cdr (assoc major-mode ecco-pygments-lexer-table))))
+      (<span class="keyword">if</span> lexer
+          (format <span class="string">&quot;-l %s&quot;</span> lexer)
+        <span class="string">&quot;-g&quot;</span>)))
+   (ecco-pygments-lexer
+    (format <span class="string">&quot;-l %s&quot;</span> ecco-pygments-lexer))
+   (t
+    <span class="string">&quot;-g&quot;</span>)))
+
+(<span class="keyword">defun</span> <span class="function-name">ecco--pygments-dividers</span> ()
+  (<span class="keyword">let*</span> ((mode major-mode)
+         (snippet-divider (<span class="keyword">with-temp-buffer</span>
+                            (funcall mode)
+                            (insert <span class="string">&quot;ECCO-SNIPPET-DIVIDER&quot;</span>)
+                            (comment-region (point-min) (point-max))
+                            (buffer-string))))
+    (cons (format <span class="string">&quot;\n\n%s\n\n&quot;</span> snippet-divider)
+          (format <span class="string">&quot;\n*&lt;span class=\&quot;c.?\&quot;&gt;%s&lt;/span&gt;\n*&quot;</span> snippet-divider))))</pre>
+          </div>
+        </div>
+        <div class="annotation"><p>To output the final HTML code, we design a quick&#8217;n&#8217;dirty XML output
+library. this function will take a list like</p>
+
+<pre><code>(:html
+ (:head
+  (:title ,title))
+ (:body
+  (:div :class &quot;container&quot;
+        (:p &quot;some paragraph text&quot;))))
+</code></pre>
+
+<p>and output the corresponding HTML. It&#8217;s not as fantastic as
+<a href="http://weitz.de/cl-who/">cl-who</a>, but gets the job done!</p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">defun</span> <span class="function-name">ecco--output-xml-from-list</span> (content)
+  (<span class="keyword">labels</span> ((format-thing (thing)
+                         (<span class="keyword">cond</span> ((keywordp thing)
+                                (substring (symbol-name thing) 1))
+                               ((stringp thing)
+                                (format <span class="string">&quot;\&quot;%s\&quot;&quot;</span> thing))
+                               (t
+                                (format <span class="string">&quot;%s&quot;</span> thing))))
+           (princ-format (format-string <span class="type">&amp;rest</span> format-args)
+                         (princ (apply #'format format-string format-args)))
+           (output-xml (content depth)
+                       (<span class="keyword">let</span> ((elem (pop content)))
+                         (princ-format <span class="string">&quot;&lt;%s&quot;</span> (format-thing elem))
+                         (<span class="keyword">loop</span> for (key value . rest) on content by #'cddr
+                               while (and (keywordp key) value (atom value))
+                               do (princ-format <span class="string">&quot; %s=%s&quot;</span>
+                                                (format-thing key)
+                                                (format-thing value))
+                               (setq content rest))
+                         (princ-format <span class="string">&quot;&gt;&quot;</span>)
+                         (<span class="keyword">loop</span> with conses.in.content = (<span class="keyword">loop</span> for elem in content
+                                                              when (consp elem)
+                                                              return t)
+                               for next in content
+                               do
+                               (<span class="keyword">when</span> conses.in.content
+                                 (princ-format <span class="string">&quot;\n%s&quot;</span> (make-string (* 2 (1+ depth)) ? )))
+                               (<span class="keyword">cond</span> ((atom next)
+                                      (princ-format <span class="string">&quot;%s&quot;</span> next))
+                                     ((consp next)
+                                      (output-xml next (1+ depth))))
+                               finally (<span class="keyword">when</span> conses.in.content
+                                         (princ-format <span class="string">&quot;\n%s&quot;</span> (make-string (* 2 depth) ? )))
+                               (princ-format <span class="string">&quot;&lt;/%s&gt;&quot;</span> (format-thing elem))))))
+    (<span class="keyword">with-output-to-string</span>
+      (output-xml content 0))))</pre>
+          </div>
+        </div>
+        <div class="annotation"><p>These two functions return different styles of templates that can be fed to
+<code>ecco--output-xml-from-list</code></p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">defun</span> <span class="function-name">ecco--parallel-template</span> (title rendered-sections)
+  `(<span class="builtin">:html</span>
+    (<span class="builtin">:head</span>
+     (<span class="builtin">:title</span> ,title)
+     (<span class="builtin">:meta :http-equiv</span> <span class="string">&quot;content-type&quot;</span> <span class="builtin">:content</span> <span class="string">&quot;text/html charset=UTF-8&quot;</span>)
+     ,@(mapcar #'(<span class="keyword">lambda</span> (url)
+                   `(<span class="builtin">:link :rel</span> <span class="string">&quot;stylesheet&quot;</span> <span class="builtin">:type</span> <span class="string">&quot;text/css&quot;</span> <span class="builtin">:media</span> <span class="string">&quot;all&quot;</span> <span class="builtin">:href</span> ,url))
+               '(<span class="string">&quot;http://jashkenas.github.io/docco/resources/parallel/public/stylesheets/normalize.css&quot;
+                 &quot;http://jashkenas.github.io/docco/resources/parallel/docco.css&quot;</span>))
+     ,@(<span class="keyword">when</span> ecco-use-pygments
+         `((<span class="builtin">:style :type</span> <span class="string">&quot;text/css&quot;</span>
+                   ,(shell-command-to-string (format <span class="string">&quot;%s -f html -S monokai -a .highlight&quot;</span>
+                                                     ecco-pygmentize-program)))
+           (<span class="builtin">:style :type</span> <span class="string">&quot;text/css&quot;
+                   &quot;pre, tt, code { background: none; border: none;}&quot;</span>)))
+     ,@ecco-extra-meta-html)
+    (<span class="builtin">:body</span>
+     (<span class="builtin">:div :class</span> <span class="string">&quot;container&quot;</span>
+           (<span class="builtin">:div :id</span> <span class="string">&quot;background&quot;</span>)
+           (<span class="builtin">:ul :class</span> <span class="string">&quot;sections&quot;</span>
+                (<span class="builtin">:li :id</span> <span class="string">&quot;title&quot;</span>
+                     (<span class="builtin">:div :class</span> <span class="string">&quot;annotation&quot;</span>
+                           (<span class="builtin">:h1</span> ,title)))
+                ,@(<span class="keyword">loop</span> for section in rendered-sections
+                        for i from 0
+                        for heading-p = (string-match
+                                         <span class="string">&quot;^[[:blank:]]*&lt;</span><span class="regexp-grouping-backslash">\\</span><span class="regexp-grouping-construct">(</span><span class="string">h[[:digit:]]</span><span class="regexp-grouping-backslash">\\</span><span class="regexp-grouping-construct">)</span><span class="string">&gt;&quot;</span>
+                                         (car section))
+                        collect
+                        `(<span class="builtin">:li :id</span> ,(format <span class="string">&quot;section-%s&quot;</span> (1+ i))
+                              (<span class="builtin">:div :class</span> <span class="string">&quot;annotation&quot;</span>
+                                    (<span class="builtin">:div :class</span>
+                                          ,(format <span class="string">&quot;pilwrap %s&quot;</span>
+                                                   (<span class="keyword">if</span> heading-p
+                                                       (format <span class="string">&quot;for-%s&quot;</span>
+                                                               (match-string 1
+                                                                             (car section)))
+                                                     <span class="string">&quot;&quot;</span>))
+                                          (<span class="builtin">:a :class</span> <span class="string">&quot;pilcrow&quot;</span>
+                                              <span class="builtin">:href</span> ,(format <span class="string">&quot;#section-%s&quot;</span> (1+ i))
+                                              <span class="string">&quot;&amp;#182;&quot;</span>))
+                                    ,(car section))
+                              (<span class="builtin">:div :class</span> <span class="string">&quot;content&quot;</span>
+                                    (<span class="builtin">:div :class</span> <span class="string">&quot;highlight&quot;</span>
+                                          (<span class="builtin">:pre</span> ,(cdr section)))))))))))
+
+(<span class="keyword">defun</span> <span class="function-name">ecco--linear-template</span> (title rendered-sections)
+  `(<span class="builtin">:html</span>
+    (<span class="builtin">:head</span>
+     (<span class="builtin">:title</span> ,title)
+     (<span class="builtin">:meta :http-equiv</span> <span class="string">&quot;content-type&quot;</span> <span class="builtin">:content</span> <span class="string">&quot;text/html charset=UTF-8&quot;</span>)
+     ,@(mapcar #'(<span class="keyword">lambda</span> (url)
+                   `(<span class="builtin">:link :rel</span> <span class="string">&quot;stylesheet&quot;</span> <span class="builtin">:type</span> <span class="string">&quot;text/css&quot;</span> <span class="builtin">:media</span> <span class="string">&quot;all&quot;</span> <span class="builtin">:href</span> ,url))
+               '(<span class="string">&quot;http://jashkenas.github.io/docco/resources/linear/public/stylesheets/normalize.css&quot;
+                 &quot;http://jashkenas.github.io/docco/resources/linear/docco.css&quot;</span>))
+     ,@(<span class="keyword">when</span> ecco-use-pygments
+         `((<span class="builtin">:style :type</span> <span class="string">&quot;text/css&quot;</span>
+                   ,(shell-command-to-string (format <span class="string">&quot;%s -f html -S monokai -a .highlight&quot;</span>
+                                                     ecco-pygmentize-program)))
+           (<span class="builtin">:style :type</span> <span class="string">&quot;text/css&quot;
+                   &quot;pre, tt, code { background: none; border: none;}&quot;</span>)))
+     ,@ecco-extra-meta-html)
+    (<span class="builtin">:body</span>
+     (<span class="builtin">:div :class</span> <span class="string">&quot;container&quot;</span>
+           (<span class="builtin">:div :class</span> <span class="string">&quot;page&quot;</span>
+                 (<span class="builtin">:div :class</span> <span class="string">&quot;header&quot;</span> (<span class="builtin">:h1</span> ,title))
+                 ,@(<span class="keyword">loop</span> for section in rendered-sections
+                         append
+                         (list `(<span class="builtin">:div :class</span> <span class="string">&quot;annotation&quot;</span> ,(car section))
+                               `(<span class="builtin">:div :class</span> <span class="string">&quot;content&quot;</span>
+                                      (<span class="builtin">:div :class</span> <span class="string">&quot;highlight&quot;</span>
+                                            (<span class="builtin">:pre</span> ,(cdr section)))))))))))
+
+</pre>
+          </div>
+        </div>
+        <div class="annotation"><h2 id="postprocessingcommentregions">Postprocessing comment regions</h2>
+
+<p>This variable contains a list of functions that are called with comment
+annotations gathered by <code>ecco--gather-sections</code>, just before sending them to
+the markdown interpreter.</p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">defvar</span> <span class="variable-name">ecco-comment-cleanup-functions</span> '(ecco-backtick-and-quote-to-double-backtick
+                                         ecco-make-autolinks
+                                         ecco-fix-links))</pre>
+          </div>
+        </div>
+        <div class="annotation"><p>This little function replaces emacs &#8220;backtick-and-quote&#8221;-style comments with
+markdown&#8217;s &#8220;double-backtick&#8221;, in case you use which the former be converted
+to the latter.</p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">defun</span> <span class="function-name">ecco-backtick-and-quote-to-double-backtick</span> ()
+  (<span class="keyword">while</span> (re-search-forward <span class="string">&quot;`</span><span class="regexp-grouping-backslash">\\</span><span class="regexp-grouping-construct">(</span><span class="string">[</span><span class="negation-char">^</span><span class="string">\n]+?</span><span class="regexp-grouping-backslash">\\</span><span class="regexp-grouping-construct">)</span><span class="string">'&quot;</span> nil t)
+    (replace-match <span class="string">&quot;`\\1`&quot;</span> nil nil)))</pre>
+          </div>
+        </div>
+        <div class="annotation"><p><code>ecco-make-autolinks</code> replaces links to existing files with guessed .html
+versions. If you invoke <code>ecco</code> on a file &#8220;a.something&#8221; and it mentions
+&#8220;b.something&#8221; and &#8220;b.something&#8221; exists relative to &#8220;a.something&#8221;&#8217;s path,
+then &#8220;a.html&#8221; will contain a link to &#8220;b.html&#8221;</p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">defun</span> <span class="function-name">ecco-make-autolinks</span> ()
+  (<span class="keyword">while</span> (and (re-search-forward <span class="string">&quot;[[:blank:]\n]</span><span class="regexp-grouping-backslash">\\</span><span class="regexp-grouping-construct">(</span><span class="regexp-grouping-backslash">\\</span><span class="regexp-grouping-construct">(</span><span class="string">[-_/[:word:]]+</span><span class="regexp-grouping-backslash">\\</span><span class="regexp-grouping-construct">)</span><span class="string">\\.[[:word:]]+</span><span class="regexp-grouping-backslash">\\</span><span class="regexp-grouping-construct">)</span><span class="string">[[:blank:]\n]&quot;</span>
+                                 nil t)
+              (file-exists-p (match-string 1)))
+    (<span class="keyword">cond</span> (ecco-output-directory
+           (replace-match (format <span class="string">&quot;[%s](%s/%s.html)&quot;</span>
+                                  (match-string 1)
+                                  ecco-output-directory
+                                  (file-name-sans-extension
+                                   (file-name-nondirectory (match-string 1))))
+                          nil nil nil 1))
+          (t
+           (replace-match (format <span class="string">&quot;[%s](%s)&quot;</span>
+                                  (match-string 1)
+                                  (match-string 1))
+                          nil nil nil 1)))))</pre>
+          </div>
+        </div>
+        <div class="annotation"><p>The <code>ecco</code> command creates a temporary buffer and file and so needs absolute
+links. The <code>ecco-files</code> command, on the other hand, place files in a
+directory chosen by the user. This cleanup function makes the links be
+relative again if necessary.</p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">defvar</span> <span class="variable-name">ecco-output-directory</span> nil)
+(<span class="keyword">defun</span> <span class="function-name">ecco-fix-links</span> ()
+  <span class="doc">&quot;Guess if  markdown link should be relative or absolute.
+
+If you do M-x ecco, links should be absolute, but when
+you call M-x ecco-files, you tipically want them to be relative.&quot;</span>
+  (<span class="keyword">loop</span> while (re-search-forward <span class="string">&quot;\(</span><span class="regexp-grouping-backslash">\\</span><span class="regexp-grouping-construct">(</span><span class="string">[-_\./:[:word:]]+\\.[[:word:]]+</span><span class="regexp-grouping-backslash">\\</span><span class="regexp-grouping-construct">)</span><span class="string">\)&quot;</span>
+                                 nil t)
+        for relative-name = (match-string 1)
+        when (file-exists-p relative-name)
+        do
+        (<span class="keyword">cond</span> (ecco-output-directory
+               (replace-match (file-relative-name relative-name ecco-output-directory)
+                              nil nil nil 1))
+              (t
+               (replace-match (format <span class="string">&quot;%s%s&quot;</span> (expand-file-name default-directory)
+                                      relative-name)
+                              nil nil nil 1)))))
+
+</pre>
+          </div>
+        </div>
+        <div class="annotation"><h2 id="useroptions">User options</h2>
+
+<p>This section controls the use of markdown</p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">defvar</span> <span class="variable-name">ecco-markdown-program</span> <span class="string">&quot;markdown&quot;</span>)
+(<span class="keyword">defun</span> <span class="function-name">ecco--markdown-dividers</span> ()
+  (cons <span class="string">&quot;\n\n##### ECCO-COMMENT-DIVIDER\n\n&quot;
+        &quot;\n*&lt;h5.*&gt;ECCO-COMMENT-DIVIDER&lt;/h5&gt;\n*&quot;</span>))</pre>
+          </div>
+        </div>
+        <div class="annotation"><p>This section controls the use of pygments. Pygments is turned off by
+default, I&#8217;ve noticed emacs&#8217;s <code>htmlfontify</code> works quite nicely most of the
+time.</p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">defvar</span> <span class="variable-name">ecco-use-pygments</span> nil)
+(<span class="keyword">defvar</span> <span class="variable-name">ecco-pygmentize-program</span> <span class="string">&quot;pygmentize&quot;</span>)
+(<span class="keyword">defvar</span> <span class="variable-name">ecco-pygments-lexer</span> 'guess)
+(<span class="keyword">defvar</span> <span class="variable-name">ecco-pygments-lexer-table</span>
+  '((lisp-mode . <span class="string">&quot;cl&quot;</span>)
+    (emacs-lisp-mode . <span class="string">&quot;cl&quot;</span>)
+    (sh-mode . <span class="string">&quot;sh&quot;</span>)
+    (c-mode . <span class="string">&quot;c&quot;</span>)))</pre>
+          </div>
+        </div>
+        <div class="annotation"><p>Here are a bunch of user options that I haven&#8217;t bothered to document
+yet. Sorry.</p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">defvar</span> <span class="variable-name">ecco-comment-skip-regexps</span> '())
+(<span class="keyword">defvar</span> <span class="variable-name">ecco-template-function</span> 'ecco--linear-template)
+(<span class="keyword">defvar</span> <span class="variable-name">ecco-extra-meta-html</span> `((<span class="builtin">:style :type</span> <span class="string">&quot;text/css&quot;
+                                       &quot;.annotation img { width: 100%; height: auto;}&quot;</span>)))
+
+</pre>
+          </div>
+        </div>
+        <div class="annotation"><h2 id="mainentrypoint">Main entry point</h2>
+
+<p>The main command <code>ecco</code> that the user invokes makes use everything defined
+before.</p>
+
+<h3 id="autoload">autoload</h3></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">defun</span> <span class="function-name">ecco</span> (buffer <span class="type">&amp;optional</span> interactive)
+  (interactive (list (current-buffer) t))
+  (<span class="keyword">with-current-buffer</span> buffer
+    (<span class="keyword">unwind-protect</span>
+        (<span class="keyword">progn</span>
+          (ecco--place-overlays)
+          (ecco--refine-overlays)
+          (<span class="keyword">let*</span> ((sections (ecco--gather-sections))
+                 (rendered-sections (ecco--render-sections sections))
+                 (title (buffer-name (current-buffer))))
+            (<span class="keyword">with-current-buffer</span> (get-buffer-create (format <span class="string">&quot;*ecco for %s*&quot;</span> title))
+              (<span class="keyword">let</span> (standard-output (current-buffer))
+                (erase-buffer)
+                (insert <span class="string">&quot;&lt;!DOCTYPE html&gt;\n&quot;</span>)
+                (insert
+                 (ecco--output-xml-from-list
+                  (funcall ecco-template-function title rendered-sections))))
+              (goto-char (point-min))
+              (<span class="keyword">if</span> interactive
+                  (<span class="keyword">if</span> (y-or-n-p <span class="string">&quot;Launch browse-url-of-buffer?&quot;</span>)
+                      (browse-url-of-buffer)
+                    (pop-to-buffer (current-buffer)))
+                (current-buffer)))))
+      (ecco--cleanup-overlays))))</pre>
+          </div>
+        </div>
+        <div class="annotation"><h3 id="autoload">autoload</h3></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">defun</span> <span class="function-name">ecco-files</span> (input-spec ecco-output-directory <span class="type">&amp;optional</span> interactive)
+  (interactive
+   (<span class="keyword">let*</span> ((input-spec (read-file-name <span class="string">&quot;File or wildcard: &quot;</span>))
+          (input-directory (file-name-directory input-spec ))
+          (ecco-output-directory (read-directory-name <span class="string">&quot;Output directory: &quot;</span>
+                                                      input-directory
+                                                      input-directory
+                                                      t)))
+
+     (list input-spec ecco-output-directory t)))
+  (<span class="keyword">let*</span> ((new-file-buffers '())
+         (kill-buffer-query-functions nil))
+    (<span class="keyword">loop</span> for file in (file-expand-wildcards input-spec)
+          for buffer = (or (find-buffer-visiting file)
+                           (car (push (find-file-noselect file)
+                                      new-file-buffers)))
+          for resulting-buffer = (ecco buffer)
+          do
+          (<span class="keyword">with-current-buffer</span> resulting-buffer
+            (<span class="keyword">let*</span> ((output-name (format <span class="string">&quot;%s/%s.html&quot;</span> ecco-output-directory
+                                        (file-name-sans-extension
+                                         (file-name-nondirectory
+                                          (buffer-file-name buffer))))))
+              (write-file output-name)
+              (kill-buffer))))
+    (<span class="keyword">when</span> (and interactive
+               new-file-buffers
+               (y-or-n-p (format <span class="string">&quot;Close extra buffers opened %s?&quot;</span> new-file-buffers)))
+      (<span class="keyword">let</span> ((kill-buffer-query-functions nil))
+        (mapc #'kill-buffer new-file-buffers)))))
+
+</pre>
+          </div>
+        </div>
+        <div class="annotation"><h2 id="debugfunctions">Debug functions</h2>
+
+<p>for now, the only debug function is <code>ecco--gather-sections-debug</code></p></div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">defun</span> <span class="function-name">ecco--gather-sections-debug</span> ()
+  (interactive)
+  (<span class="keyword">let</span> ((sections (ecco--gather-sections)))
+    (<span class="keyword">with-current-buffer</span>
+        (get-buffer-create (format <span class="string">&quot;*ecco--debug for %s*&quot;</span> (buffer-name (current-buffer))))
+      (erase-buffer)
+      (<span class="keyword">dolist</span> (section sections)
+        (insert <span class="string">&quot;\n-**- COMMENT -**-\n&quot;</span>)
+        (insert (car section))
+        (insert <span class="string">&quot;\n-**- SNIPPET -**-\n&quot;</span>)
+        (insert (cdr section)))
+      (goto-char (point-min))
+      (pop-to-buffer (current-buffer)))))
+</pre>
+          </div>
+        </div>
+        <div class="annotation"><p>This little command provides the <code>ecco</code> feature.</p>
+</div>
+        <div class="content">
+          <div class="highlight">
+            <pre>(<span class="keyword">provide</span> '<span class="constant">ecco</span>)</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
