@@ -19,7 +19,6 @@
 ;;; overlays over the comments and return comments and code as pairs of strings.
 ;;;
 (defun ecco--place-overlays ()
-  (ecco--cleanup-overlays)
   (save-excursion
     (goto-char (point-min))
     (loop while (comment-search-forward (point-max) t)
@@ -33,8 +32,6 @@
             (overlay-put overlay 'ecco t)))))
 
 (defun ecco--gather-sections ()
-  (ecco--place-overlays)
-  (ecco--refine-overlays)
   (let ((mode major-mode)
         (overlays (sort (ecco--overlays)
                         #'(lambda (ov1 ov2)
@@ -405,22 +402,25 @@ you call M-x ecco-files, you tipically want them to be relative."
   (interactive (list (current-buffer) t))
   (with-current-buffer buffer
     (unwind-protect
-      (let* ((sections (ecco--gather-sections))
-             (rendered-sections (ecco--render-sections sections))
-             (title (buffer-name (current-buffer))))
-        (with-current-buffer (get-buffer-create (format "*ecco for %s*" title))
-          (let (standard-output (current-buffer))
-            (erase-buffer)
-            (insert "<!DOCTYPE html>\n")
-            (insert
-             (ecco--output-xml-from-list
-              (funcall ecco-template-function title rendered-sections))))
-          (goto-char (point-min))
-          (if interactive
-              (if (y-or-n-p "Launch browse-url-of-buffer?")
-                  (browse-url-of-buffer)
-                (pop-to-buffer (current-buffer)))
-            (current-buffer))))
+        (progn
+          (ecco--place-overlays)
+          (ecco--refine-overlays)
+          (let* ((sections (ecco--gather-sections))
+                 (rendered-sections (ecco--render-sections sections))
+                 (title (buffer-name (current-buffer))))
+            (with-current-buffer (get-buffer-create (format "*ecco for %s*" title))
+              (let (standard-output (current-buffer))
+                (erase-buffer)
+                (insert "<!DOCTYPE html>\n")
+                (insert
+                 (ecco--output-xml-from-list
+                  (funcall ecco-template-function title rendered-sections))))
+              (goto-char (point-min))
+              (if interactive
+                  (if (y-or-n-p "Launch browse-url-of-buffer?")
+                      (browse-url-of-buffer)
+                    (pop-to-buffer (current-buffer)))
+                (current-buffer)))))
       (ecco--cleanup-overlays))))
 
 ;;;###autoload
