@@ -1,13 +1,5 @@
-
-            -----       -----     -----     -----
-           /   /       /   /     /   /     /     \
-          /   /       /   /     /   /     /   ^   \
-         /   ---\    /   /     /   /     /   / \   \
-        <        >  <   <     <   <     <   <   >   >
-         \   ---/    \   \     \   \     \   \ /   /
-          \   \       \   \     \   \     \   v   /
-           \   \       \   \     \   \     \     /
-            -----       -----     -----     -----
+ecco
+====
 
 **ecco** is a literate-programming style documentatino generator for emacs.  Its
 a port of the very excellent [docco][docco].
@@ -42,10 +34,12 @@ To get it
 Then, in your `.emacs` or `.emacs.d/init.el`
 
     (require 'ecco)
-    ;; skip the next line if you have a "markdown" program in your path
+    
+Skip the next line if you have a "markdown" program in your path
+
     (setq ecco-markdown-program "/path/to/your/markdown/interpreter")
 
-Then in any file where you have comments as markdown, try this
+Inside emacs, open any file where you have comments as markdown, try this
 
     M-x ecco
 
@@ -59,7 +53,7 @@ so soon, [el-get][el-get] and [melpa][melpa] are good candidates)
 [el-get]: https://github.com/dimitri/el-get
 [melpa]:  https://github.com/dimitri/el-get
 
-A good mardkwon interpreter
+A good markdown interpreter
 ---------------------------
 
 If you have a working markdown interpreter in your path, you can skip the next
