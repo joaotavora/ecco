@@ -26,9 +26,10 @@
           (let ((overlay (make-overlay (goto-char (nth 8 (syntax-ppss)))
                                        (progn (forward-comment (point-max))
                                               (line-beginning-position)))))
-            ;; The "green" is for debug purposes, user should never actually see
-            ;; this as the overlays are cleaned up afterwards.
-            (overlay-put overlay 'face '(:background  "green"))
+            ;; The "background color" is for bling and debug purposes, user
+            ;; should never actually after the command finishes
+            ;;
+            (overlay-put overlay 'face '(:background  "lavender"))
             (overlay-put overlay 'ecco t)))))
 
 (defun ecco--gather-sections ()
