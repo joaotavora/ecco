@@ -13,13 +13,20 @@
         <div class="header">
           <h1>ecco.el</h1>
         </div>
-        <div class="annotation"><p><strong>ecco</strong> is a port of docco. It renders</p>
+        <div class="annotation"><p><strong><a href="https://github.com/capitaomorte/ecco">ecco</a></strong> is a port of <a href="https://github.com/jashkenas/docco">docco</a>, a documentation generator for
+the <a href="http://en.wikipedia.org/wiki/Literate_programming">literate programming</a> style.</p>
+
+<p>The idea is to parse your code into sections of comments and code, and then
+render a nice HTML file:</p>
 
 <ul>
-<li><p>comments through <a href="http://daringfireball.net/projects/markdown/">markdown</a></p></li>
-<li><p>code through emacs&#8217;s built-int <code>htmlfontify</code> library, or
- <a href="http://pygments.org/">pygments</a> if the user sets <code>ecco-use-pygments</code> to <code>t</code>.</p></li>
-</ul></div>
+<li><p>Comments are rendered through <a href="http://daringfireball.net/projects/markdown/">markdown</a></p></li>
+<li><p>Code snippets are either rendered through emacs&#8217;s built-in <code>htmlfontify</code>
+ library by default.</p></li>
+</ul>
+
+<p>One advantage of <strong>ecco</strong> is that is uses emacs&#8217; built-in comment processing
+and syntax highlighting engines to do most of the work.</p></div>
         <div class="content">
           <div class="highlight">
             <pre>(<span class="keyword">require</span> '<span class="constant">newcomment</span>)
