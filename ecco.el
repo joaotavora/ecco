@@ -330,7 +330,7 @@ link to b.html."
 
 If you do M-x ecco, links should be absolute, but when
 you call M-x ecco-files, you tipically want them to be relative."
-  (loop while (re-search-forward "\(\\([-_/:[:word:]]+\\.[[:word:]]+\\)\)"
+  (loop while (re-search-forward "\(\\([-_\./:[:word:]]+\\.[[:word:]]+\\)\)"
                                  nil t)
         for relative-name = (match-string 1)
         when (file-exists-p relative-name)
