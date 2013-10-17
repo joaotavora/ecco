@@ -1,20 +1,20 @@
 ecco
 ====
 
-**ecco** is a literate-programming style documentatino generator for emacs.  Its
+**ecco** is a literate-programming style documentation generator for emacs.  Its
 a port of the very excellent [docco][docco].
 
 Docco is mainly for javascript, and already has many language-specific ports
-like [shocco][shocco] for shell-scripts , [rocco][rocco] for ruby, among others.
+like [shocco][shocco] for shell-scripts, [rocco][rocco] for ruby, among others.
 
 The idea is to write comments and in-code documentation as [markdown][markdown],
 and, then type `M-x ecco` and see pretty docs in your browser.
 
-To understand what it does, look [here][self] for ecco-generated documentaion
+To understand what it does, look [here][self] for ecco-generated documentation
 for the ecco program itself.
 
 An advantage of ecco is that it uses emacs's built-in comment processing
-funcionality and highlighting functionality and so works for any language.
+funcionality and highlighting functionality and so it works for any language.
 
 [docco]:    https://github.com/jashkenas/docco
 [shocco]:   https://github.com/rtomayko/shocco
@@ -47,7 +47,7 @@ To generate documentation for many files try
 
     M-x ecco-files
 
-I haven't (yet) included ecco in any package-management system yet (plan to do
+I haven't (yet) included ecco in any package-management system (plan to do
 so soon, [el-get][el-get] and [melpa][melpa] are good candidates)
 
 [el-get]: https://github.com/dimitri/el-get
