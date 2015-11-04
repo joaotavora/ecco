@@ -1,3 +1,4 @@
+;;; ecco.el --- a port of docco
 ;;; **ecco** is a port of docco. It renders
 ;;;
 ;;; * comments through [markdown][markdown]
