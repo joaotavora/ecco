@@ -158,7 +158,13 @@
                (t
                 (let ((hfy-optimisations (list 'keep-overlays
                                                'merge-adjacent-tags
-                                               'body-text-only)))
+                                               'body-text-only))
+                      (hfy-user-sheet-assoc '((font-lock-string-face "hljs-string" . "dummy")
+                                              (font-lock-keyword-face "hljs-keyword" . "dummy")
+                                              (font-lock-function-name-face "hljs-title" . "dummy")
+                                              (font-lock-comment-face "hljs-comment" . "dummy")
+                                              (font-lock-constant-face "hljs-constant" . "dummy")
+                                              (font-lock-warning-face "hljs-warning" . "dummy"))))
                   (mapcar #'htmlfontify-string (mapcar #'cdr sections)))))))
     (map 'list #'cons comments snippets)))
 
