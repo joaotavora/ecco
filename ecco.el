@@ -55,28 +55,30 @@
     ;; Now loop on the overlays, collect comments and code snippets
     ;;
     (loop for (overlay next) on overlays
-          for comment = (let ((comment-text (buffer-substring-no-properties (overlay-start overlay)
-                                                                            (overlay-end overlay))))
+          for comment =
+          (let ((comment-text (buffer-substring-no-properties
+                               (overlay-start overlay)
+                               (overlay-end overlay))))
 
-                          ;; Place the comment text in a temp buffer with the
-                          ;; original major mode, strip all leading whitespace
-                          ;; and call `uncomment-region'
-                          (with-temp-buffer
-                            (insert comment-text)
-                            (goto-char (point-min))
-                            (while (re-search-forward "^\\([[:blank:]]+\\)[^[:blank:]]" nil t)
-                              (replace-match "" nil nil nil 1))
-                            (funcall mode)
-                            (uncomment-region (point-min) (point-max))
-                            ;; User-settable `ecco-comment-cleanup-functions',
-                            ;; can further be used to cleanup the comment of any
-                            ;; artifacts.
-                            (mapc #'(lambda (fn)
-                                      (save-excursion
-                                        (goto-char (point-min))
-                                        (funcall fn)))
-                                  ecco-comment-cleanup-functions)
-                            (buffer-substring-no-properties (point-min) (point-max))))
+            ;; Place the comment text in a temp buffer with the
+            ;; original major mode, strip all leading whitespace
+            ;; and call `uncomment-region'
+            (with-temp-buffer
+              (insert comment-text)
+              (goto-char (point-min))
+              (while (re-search-forward "^\\([[:blank:]]+\\)[^[:blank:]]" nil t)
+                (replace-match "" nil nil nil 1))
+              (funcall mode)
+              (uncomment-region (point-min) (point-max))
+              ;; User-settable `ecco-comment-cleanup-functions',
+              ;; can further be used to cleanup the comment of any
+              ;; artifacts.
+              (mapc #'(lambda (fn)
+                        (save-excursion
+                          (goto-char (point-min))
+                          (funcall fn)))
+                    ecco-comment-cleanup-functions)
+              (buffer-substring-no-properties (point-min) (point-max))))
           for (from . to) = (cons (overlay-end overlay)
                                   (or (and next
                                            (overlay-start next))
@@ -112,9 +114,11 @@
                      ;;
                      (if (= (overlay-start overlay) (match-beginning 0))
                          (delete-overlay overlay)
-                         (move-overlay overlay (overlay-start overlay) (match-beginning 0)))
+                       (move-overlay overlay (overlay-start overlay)
+                                     (match-beginning 0)))
                      (unless (= (match-end 0) saved-end)
-                       (let ((new-overlay (make-overlay (match-end 0) saved-end)))
+                       (let ((new-overlay (make-overlay (match-end 0)
+                                                        saved-end)))
                          (overlay-put new-overlay 'face '(:background  "pink"))
                          (overlay-put new-overlay 'ecco t)
                          (setq overlay new-overlay))))))))
@@ -140,31 +144,35 @@
          (ecco--blob-render (mapcar #'car sections)
                             (ecco--markdown-dividers)
                             #'(lambda (text)
-                                (ecco--pipe-text-through-program text
-                                                                 (executable-find ecco-markdown-program)))))
+                                (ecco--pipe-text-through-program
+                                 text
+                                 (executable-find ecco-markdown-program)))))
         (snippets
          (cond (ecco-use-pygments
                 (ecco--blob-render
                  (mapcar #'cdr sections)
                  (ecco--pygments-dividers)
                  #'(lambda (text)
-                     (let ((render (ecco--pipe-text-through-program text
-                                                                    (format "%s %s -f html"
-                                                                            ecco-pygmentize-program
-                                                                            (ecco--lexer-args)))))
-                       (setq render (replace-regexp-in-string
-                                     "^<div class=\"highlight\"><pre>" "" render))
+                     (let ((render (ecco--pipe-text-through-program
+                                    text
+                                    (format "%s %s -f html"
+                                            ecco-pygmentize-program
+                                            (ecco--lexer-args)))))
+                       (setq render
+                             (replace-regexp-in-string
+                              "^<div class=\"highlight\"><pre>" "" render))
                        (replace-regexp-in-string "</pre></div>$" "" render)))))
                (t
                 (let ((hfy-optimisations (list 'keep-overlays
                                                'merge-adjacent-tags
                                                'body-text-only))
-                      (hfy-user-sheet-assoc '((font-lock-string-face "hljs-string" . "dummy")
-                                              (font-lock-keyword-face "hljs-keyword" . "dummy")
-                                              (font-lock-function-name-face "hljs-title" . "dummy")
-                                              (font-lock-comment-face "hljs-comment" . "dummy")
-                                              (font-lock-constant-face "hljs-constant" . "dummy")
-                                              (font-lock-warning-face "hljs-warning" . "dummy"))))
+                      (hfy-user-sheet-assoc
+                       '((font-lock-string-face "hljs-string" . "dummy")
+                         (font-lock-keyword-face "hljs-keyword" . "dummy")
+                         (font-lock-function-name-face "hljs-title" . "dummy")
+                         (font-lock-comment-face "hljs-comment" . "dummy")
+                         (font-lock-constant-face "hljs-constant" . "dummy")
+                         (font-lock-warning-face "hljs-warning" . "dummy"))))
                   (mapcar #'htmlfontify-string (mapcar #'cdr sections)))))))
     (map 'list #'cons comments snippets)))
 
@@ -179,7 +187,8 @@
 (defun ecco--pipe-text-through-program (text program)
   (with-temp-buffer
     (insert text)
-    (shell-command-on-region (point-min) (point-max) program (current-buffer) 'replace)
+    (shell-command-on-region (point-min) (point-max) program
+                             (current-buffer) 'replace)
     (buffer-string)))
 
 ;;; We also need these two to make blob rendering work with pygments
@@ -241,19 +250,25 @@
                                                 (format-thing value))
                                (setq content rest))
                          (princ-format ">")
-                         (loop with conses.in.content = (loop for elem in content
-                                                              when (consp elem)
-                                                              return t)
+                         (loop with conses.in.content =
+                               (loop for elem in content
+                                     when (consp elem)
+                                     return t)
                                for next in content
                                do
                                (when conses.in.content
-                                 (princ-format "\n%s" (make-string (* 2 (1+ depth)) ? )))
+                                 (princ-format "\n%s"
+                                               (make-string (* 2
+                                                               (1+ depth))
+                                                            ? )))
                                (cond ((atom next)
                                       (princ-format "%s" next))
                                      ((consp next)
                                       (output-xml next (1+ depth))))
                                finally (when conses.in.content
-                                         (princ-format "\n%s" (make-string (* 2 depth) ? )))
+                                         (princ-format "\n%s"
+                                                       (make-string
+                                                        (* 2 depth) ? )))
                                (princ-format "</%s>" (format-thing elem))))))
     (with-output-to-string
       (output-xml content 0))))
@@ -266,14 +281,16 @@
     (:head
      (:title ,title)
      (:meta :http-equiv "content-type" :content "text/html charset=UTF-8")
-     ,@(mapcar #'(lambda (url)
-                   `(:link :rel "stylesheet" :type "text/css" :media "all" :href ,url))
-               '("http://jashkenas.github.io/docco/resources/parallel/public/stylesheets/normalize.css"
-                 "http://jashkenas.github.io/docco/resources/parallel/docco.css"))
+     ,@(mapcar
+        #'(lambda (file)
+            `(:link :rel "stylesheet" :type "text/css" :media "all"
+                    :href ,(format "%s/%s" ecco--docco-stylesheets-url file)))
+        '("parallel/public/stylesheets/normalize.css" "parallel/docco.css"))
      ,@(when ecco-use-pygments
          `((:style :type "text/css"
-                   ,(shell-command-to-string (format "%s -f html -S monokai -a .highlight"
-                                                     ecco-pygmentize-program)))
+                   ,(shell-command-to-string
+                     (format "%s -f html -S monokai -a .highlight"
+                             ecco-pygmentize-program)))
            (:style :type "text/css"
                    "pre, tt, code { background: none; border: none;}")))
      ,@ecco-extra-meta-html)
@@ -284,41 +301,48 @@
                 (:li :id "title"
                      (:div :class "annotation"
                            (:h1 ,title)))
-                ,@(loop for section in rendered-sections
-                        for i from 0
-                        for heading-p = (string-match
-                                         "^[[:blank:]]*<\\(h[[:digit:]]\\)>"
-                                         (car section))
-                        collect
-                        `(:li :id ,(format "section-%s" (1+ i))
-                              (:div :class "annotation"
-                                    (:div :class
-                                          ,(format "pilwrap %s"
-                                                   (if heading-p
-                                                       (format "for-%s"
-                                                               (match-string 1
-                                                                             (car section)))
-                                                     ""))
-                                          (:a :class "pilcrow"
-                                              :href ,(format "#section-%s" (1+ i))
-                                              "&#182;"))
-                                    ,(car section))
-                              (:div :class "content"
-                                    (:div :class "highlight"
-                                          (:pre ,(cdr section)))))))))))
+                ,@(loop
+                   for section in rendered-sections
+                   for i from 0
+                   for heading-p = (string-match
+                                    "^[[:blank:]]*<\\(h[[:digit:]]\\)>"
+                                    (car section))
+                   collect
+                   `(:li :id ,(format "section-%s" (1+ i))
+                         (:div :class "annotation"
+                               (:div :class
+                                     ,(format "pilwrap %s"
+                                              (if heading-p
+                                                  (format "for-%s"
+                                                          (match-string
+                                                           1
+                                                           (car section)))
+                                                ""))
+                                     (:a :class "pilcrow"
+                                         :href ,(format "#section-%s" (1+ i))
+                                         "&#182;"))
+                               ,(car section))
+                         (:div :class "content"
+                               (:div :class "highlight"
+                                     (:pre ,(cdr section)))))))))))
+
+(defvar ecco--docco-stylesheets-url
+  "http://jashkenas.github.io/docco/resources")
 
 (defun ecco--linear-template (title rendered-sections)
   `(:html
     (:head
      (:title ,title)
      (:meta :http-equiv "content-type" :content "text/html charset=UTF-8")
-     ,@(mapcar #'(lambda (url)
-                   `(:link :rel "stylesheet" :type "text/css" :media "all" :href ,url))
-               '("http://jashkenas.github.io/docco/resources/linear/public/stylesheets/normalize.css"
-                 "http://jashkenas.github.io/docco/resources/linear/docco.css"))
+     ,@(mapcar
+        #'(lambda (file)
+            `(:link :rel "stylesheet" :type "text/css" :media "all"
+                    :href ,(format "%s/%s" ecco--docco-stylesheets-url file)))
+        '("linear/public/stylesheets/normalize.css" "linear/docco.css"))
      ,@(when ecco-use-pygments
          `((:style :type "text/css"
-                   ,(shell-command-to-string (format "%s -f html -S monokai -a .highlight"
+                   ,(shell-command-to-string
+                     (format "%s -f html -S monokai -a .highlight"
                                                      ecco-pygmentize-program)))
            (:style :type "text/css"
                    "pre, tt, code { background: none; border: none;}")))
@@ -342,10 +366,11 @@
 ;;; annotations gathered by `ecco--gather-sections', just before sending them to
 ;;; the markdown interpreter.
 ;;;
-(defvar ecco-comment-cleanup-functions '(ecco-backtick-and-quote-to-double-backtick
-                                         ecco-make-autolinks
-                                         ecco-fix-links
-                                         ecco-ignore-elisp-headers))
+(defvar ecco-comment-cleanup-functions
+  '(ecco-backtick-and-quote-to-double-backtick
+    ecco-make-autolinks
+    ecco-fix-links
+    ecco-ignore-elisp-headers))
 
 ;;; This little function replaces emacs "backtick-and-quote"-style comments with
 ;;; markdown's "double-backtick", in case you use which the former be converted
@@ -361,7 +386,9 @@
 ;;; then "a.html" will contain a link to "b.html"
 ;;;
 (defun ecco-make-autolinks ()
-  (while (and (re-search-forward "[[:blank:]\n]\\(\\([-_/[:word:]]+\\)\\.[[:word:]]+\\)[[:blank:]\n]"
+  (while (and (re-search-forward
+               (concat "[[:blank:]\n]\\(\\([-_/[:word:]]+\\)"
+                       "\\.[[:word:]]+\\)[[:blank:]\n]")
                                  nil t)
               (file-exists-p (match-string 1)))
     (cond (ecco-output-directory
@@ -394,10 +421,12 @@ you call M-x ecco-files, you tipically want them to be relative."
         when (file-exists-p relative-name)
         do
         (cond (ecco-output-directory
-               (replace-match (file-relative-name relative-name ecco-output-directory)
+               (replace-match (file-relative-name relative-name
+                                                  ecco-output-directory)
                               nil nil nil 1))
               (t
-               (replace-match (format "%s%s" (expand-file-name default-directory)
+               (replace-match (format "%s%s"
+                                      (expand-file-name default-directory)
                                       relative-name)
                               nil nil nil 1)))))
 
@@ -437,8 +466,9 @@ you call M-x ecco-files, you tipically want them to be relative."
 ;;;
 (defvar ecco-comment-skip-regexps '())
 (defvar ecco-template-function 'ecco--linear-template)
-(defvar ecco-extra-meta-html `((:style :type "text/css"
-                                       ".annotation img { width: 100%; height: auto;}")))
+(defvar ecco-extra-meta-html
+  `((:style :type "text/css"
+            ".annotation img { width: 100%; height: auto;}")))
 
 
 ;;; Main entry point
@@ -458,7 +488,8 @@ you call M-x ecco-files, you tipically want them to be relative."
           (let* ((sections (ecco--gather-sections))
                  (rendered-sections (ecco--render-sections sections))
                  (title (buffer-name (current-buffer))))
-            (with-current-buffer (get-buffer-create (format "*ecco for %s*" title))
+            (with-current-buffer (get-buffer-create
+                                  (format "*ecco for %s*" title))
               (let (standard-output (current-buffer))
                 (erase-buffer)
                 (insert "<!DOCTYPE html>\n")
@@ -501,7 +532,8 @@ you call M-x ecco-files, you tipically want them to be relative."
               (kill-buffer))))
     (when (and interactive
                new-file-buffers
-               (y-or-n-p (format "Close extra buffers opened %s?" new-file-buffers)))
+               (y-or-n-p (format "Close extra buffers opened %s?"
+                                 new-file-buffers)))
       (let ((kill-buffer-query-functions nil))
         (mapc #'kill-buffer new-file-buffers)))))
 
@@ -514,7 +546,8 @@ you call M-x ecco-files, you tipically want them to be relative."
   (interactive)
   (let ((sections (ecco--gather-sections)))
     (with-current-buffer
-        (get-buffer-create (format "*ecco--debug for %s*" (buffer-name (current-buffer))))
+        (get-buffer-create (format "*ecco--debug for %s*"
+                                   (buffer-name (current-buffer))))
       (erase-buffer)
       (dolist (section sections)
         (insert "\n-**- COMMENT -**-\n")
