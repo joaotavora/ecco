@@ -1,3 +1,4 @@
+;;; ecco.el --- a port of docco
 ;;; **ecco** is a port of docco. It renders
 ;;;
 ;;; * comments through [markdown][markdown]
@@ -337,7 +338,8 @@
 ;;;
 (defvar ecco-comment-cleanup-functions '(ecco-backtick-and-quote-to-double-backtick
                                          ecco-make-autolinks
-                                         ecco-fix-links))
+                                         ecco-fix-links
+                                         ecco-ignore-elisp-headers))
 
 ;;; This little function replaces emacs "backtick-and-quote"-style comments with
 ;;; markdown's "double-backtick", in case you use which the former be converted
@@ -392,6 +394,13 @@ you call M-x ecco-files, you tipically want them to be relative."
                (replace-match (format "%s%s" (expand-file-name default-directory)
                                       relative-name)
                               nil nil nil 1)))))
+
+;;; Ignore some meta-information in other markup schemes.
+;;;
+(defun ecco-ignore-elisp-headers ()
+  (when (and (eq major-mode 'emacs-lisp-mode)
+             (search-forward-regexp " --- .*$" (line-end-position) t))
+    (delete-region (line-beginning-position) (line-end-position))))
 
 
 ;;; User options
