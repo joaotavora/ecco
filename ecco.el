@@ -139,7 +139,8 @@
          (ecco--blob-render (mapcar #'car sections)
                             (ecco--markdown-dividers)
                             #'(lambda (text)
-                                (ecco--pipe-text-through-program text ecco-markdown-program))))
+                                (ecco--pipe-text-through-program text
+                                                                 (executable-find ecco-markdown-program)))))
         (snippets
          (cond (ecco-use-pygments
                 (ecco--blob-render
